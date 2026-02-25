@@ -19,7 +19,7 @@ export const SocketProvider = ({ children }) => {
       return;
     }
 
-    const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || '';
+   const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'https://aurachat-server.onrender.com';
 
     // Get token from cookie is not possible client-side (httpOnly)
     // Instead, pass userId and let server verify session via a short-lived token
