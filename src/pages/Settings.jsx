@@ -4,25 +4,37 @@ import Avatar from '../components/Sidebar/Avatar';
 import api from '../services/api';
 
 const THEMES = {
-  dark:   { label: '🌑 Dark (Default)', bg: '#0f0e1a', accent: '#6c63ff' },
-  purple: { label: '💜 Deep Purple',    bg: '#120b2e', accent: '#9c27b0' },
-  blue:   { label: '💙 Ocean Blue',     bg: '#0a1628', accent: '#2196f3' },
-  green:  { label: '💚 Forest Green',   bg: '#0a1f0a', accent: '#4caf50' },
-  red:    { label: '❤️ Ruby Red',       bg: '#1a0a0a', accent: '#f44336' },
+  dark:   { label: '🌑 Dark',         bg: '#0f0e1a', accent: '#6c63ff' },
+  purple: { label: '💜 Deep Purple',   bg: '#120b2e', accent: '#9c27b0' },
+  blue:   { label: '💙 Ocean Blue',    bg: '#0a1628', accent: '#2196f3' },
+  green:  { label: '💚 Forest Green',  bg: '#0a1f0a', accent: '#4caf50' },
+  red:    { label: '❤️ Ruby Red',      bg: '#1a0a0a', accent: '#f44336' },
 };
 
 function applyTheme(key) {
-  const t = THEMES[key];
-  if (!t) return;
-  document.documentElement.style.setProperty('--bg-primary', t.bg);
+  const t = THEMES[key]; if (!t) return;
+  document.documentElement.style.setProperty('--bg-primary',   t.bg);
   document.documentElement.style.setProperty('--accent-primary', t.accent);
   document.documentElement.style.setProperty('--bg-secondary', t.bg === '#0f0e1a' ? '#1a1830' : t.bg + 'cc');
   localStorage.setItem('theme', key);
 }
+const saved = localStorage.getItem('theme');
+if (saved) applyTheme(saved);
 
-// Apply saved theme on load
-const savedTheme = localStorage.getItem('theme');
-if (savedTheme) applyTheme(savedTheme);
+function PwInput({ value, onChange, placeholder, autoComplete }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div style={{ position: 'relative' }}>
+      <input className="input" type={show ? 'text' : 'password'} value={value}
+        onChange={onChange} placeholder={placeholder} autoComplete={autoComplete}
+        required style={{ paddingRight: 44 }} />
+      <button type="button" onClick={() => setShow(s => !s)}
+        style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--text-muted)', padding: 0 }}>
+        {show ? '🙈' : '👁️'}
+      </button>
+    </div>
+  );
+}
 
 export default function Settings() {
   const { user, setUser, logout } = useAuth();
@@ -34,55 +46,73 @@ export default function Settings() {
   const [pwForm, setPwForm] = useState({ current: '', next: '', confirm: '' });
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState({ text: '', ok: true });
-  const [currentTheme, setCurrentTheme] = useState(localStorage.getItem('theme') || 'dark');
+  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
+  const [notifEnabled, setNotifEnabled] = useState(localStorage.getItem('notif_enabled') !== 'false');
+  const [deletePass, setDeletePass] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const fileRef = useRef();
 
-  const showMsg = (text, ok = true) => setMsg({ text, ok });
+  const flash = (text, ok = true) => { setMsg({ text, ok }); setTimeout(() => setMsg({ text: '', ok: true }), 4000); };
 
-  const handleAvatarChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) return showMsg('Image must be under 5MB', false);
-    setAvatarFile(file);
-    setAvatarPreview(URL.createObjectURL(file));
+  const handleAvatarChange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    if (f.size > 5 * 1024 * 1024) return flash('Image must be under 5MB', false);
+    setAvatarFile(f); setAvatarPreview(URL.createObjectURL(f));
   };
 
   const saveProfile = async () => {
-    setSaving(true); showMsg('');
+    setSaving(true); flash('');
     try {
       const fd = new FormData();
       fd.append('bio', bio);
-      if (newUsername.trim() && newUsername.trim() !== user?.username) {
-        fd.append('username', newUsername.trim());
-      }
+      if (newUsername.trim() && newUsername.trim() !== user?.username) fd.append('username', newUsername.trim());
       if (avatarFile) fd.append('avatar', avatarFile);
       const res = await api.patch('/api/auth/profile', fd);
-      setUser(prev => ({ ...prev, ...res.data.user }));
+      setUser(p => ({ ...p, ...res.data.user }));
       setAvatarFile(null);
-      showMsg('✅ Profile updated successfully!');
-    } catch (err) {
-      showMsg('❌ ' + (err.response?.data?.error || 'Failed to save'), false);
-    } finally { setSaving(false); }
+      flash('✅ Profile updated!');
+    } catch (err) { flash('❌ ' + (err.response?.data?.error || 'Failed'), false); }
+    finally { setSaving(false); }
   };
 
-  const changePassword = async (e) => {
+  const changePassword = async e => {
     e.preventDefault();
-    if (pwForm.next !== pwForm.confirm) return showMsg('❌ Passwords do not match', false);
-    if (pwForm.next.length < 6) return showMsg('❌ Password must be at least 6 characters', false);
-    setSaving(true); showMsg('');
+    if (pwForm.next !== pwForm.confirm) return flash('❌ Passwords do not match', false);
+    if (pwForm.next.length < 6) return flash('❌ Min 6 characters', false);
+    setSaving(true);
     try {
       await api.patch('/api/auth/password', { currentPassword: pwForm.current, newPassword: pwForm.next });
-      showMsg('✅ Password changed successfully!');
+      flash('✅ Password changed!');
       setPwForm({ current: '', next: '', confirm: '' });
-    } catch (err) {
-      showMsg('❌ ' + (err.response?.data?.error || 'Failed'), false);
-    } finally { setSaving(false); }
+    } catch (err) { flash('❌ ' + (err.response?.data?.error || 'Failed'), false); }
+    finally { setSaving(false); }
   };
 
-  const handleTheme = (key) => {
-    applyTheme(key);
-    setCurrentTheme(key);
-    showMsg('✅ Theme applied!');
+  const handleTheme = key => { applyTheme(key); setTheme(key); flash('✅ Theme applied!'); };
+
+  const toggleNotifications = async () => {
+    if (!notifEnabled) {
+      // Request permission
+      if ('Notification' in window) {
+        const perm = await Notification.requestPermission();
+        if (perm !== 'granted') { flash('❌ Notification permission denied by browser', false); return; }
+      }
+      localStorage.setItem('notif_enabled', 'true');
+      setNotifEnabled(true);
+      flash('✅ Notifications enabled!');
+    } else {
+      localStorage.setItem('notif_enabled', 'false');
+      setNotifEnabled(false);
+      flash('🔕 Notifications disabled');
+    }
+  };
+
+  const deleteAccount = async () => {
+    if (!deletePass) return flash('❌ Enter your password to confirm', false);
+    try {
+      await api.delete('/api/auth/account', { data: { password: deletePass } });
+      logout();
+    } catch (err) { flash('❌ ' + (err.response?.data?.error || 'Failed'), false); }
   };
 
   const profileChanged = avatarFile || bio !== (user?.bio || '') || newUsername.trim() !== (user?.username || '');
@@ -90,7 +120,7 @@ export default function Settings() {
   return (
     <div style={s.page}>
       {/* Profile card */}
-      <div style={s.profileCard}>
+      <div style={s.card}>
         <div style={{ position: 'relative', cursor: 'pointer', flexShrink: 0 }} onClick={() => fileRef.current?.click()}>
           <Avatar username={user?.username} avatarUrl={avatarPreview} size="xl" />
           <span style={s.cam}>📷</span>
@@ -105,39 +135,26 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* Message bar */}
       {msg.text && (
-        <div style={{ ...s.msgBar, background: msg.ok ? 'rgba(0,184,148,0.15)' : 'rgba(225,112,85,0.15)', color: msg.ok ? 'var(--online-green)' : 'var(--danger)' }}>
+        <div style={{ padding: '10px 16px', fontSize: 13, fontWeight: 600, background: msg.ok ? 'rgba(0,184,148,.15)' : 'rgba(225,112,85,.15)', color: msg.ok ? 'var(--online-green)' : 'var(--danger)' }}>
           {msg.text}
         </div>
       )}
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
 
-        {/* ── ACCOUNT ── */}
-        <Section icon="👤" label="Account" sub="Username, Bio, Avatar" open={section === 'account'} onToggle={() => setSection(p => p === 'account' ? null : 'account')}>
-          <label style={s.fieldLabel}>Username</label>
-          <input className="input" value={newUsername} onChange={e => setNewUsername(e.target.value)}
-            placeholder="New username" style={{ marginBottom: 12 }} />
-
-          <label style={s.fieldLabel}>Bio</label>
+        {/* ACCOUNT */}
+        <Section icon="👤" label="Account" sub="Username, bio, avatar" open={section==='account'} onToggle={() => setSection(p => p==='account' ? null : 'account')}>
+          <label style={s.lbl}>Username</label>
+          <input className="input" value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="New username" style={{ marginBottom: 12 }} />
+          <label style={s.lbl}>Bio</label>
           <textarea className="input" value={bio} onChange={e => setBio(e.target.value)}
-            placeholder="Tell people about yourself..." rows={3} maxLength={150}
-            style={{ resize: 'none', marginBottom: 4 }} />
+            placeholder="Tell people about yourself…" rows={3} maxLength={150} style={{ resize: 'none', marginBottom: 4 }} />
           <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right', marginBottom: 12 }}>{bio.length}/150</div>
-
-          <div style={s.infoRow}><span style={s.infoLbl}>Member since</span>
-            <span style={s.infoVal}>{user?.created_at ? new Date(user.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}</span>
-          </div>
-          <div style={s.infoRow}><span style={s.infoLbl}>User ID</span>
-            <span style={{ ...s.infoVal, fontFamily: 'monospace', fontSize: 11 }}>{user?.id?.slice(0, 18)}...</span>
-          </div>
-
-          <button className="input" style={{ background: 'var(--bg-card)', border: '1px dashed var(--border)', cursor: 'pointer', textAlign: 'center', color: 'var(--text-secondary)', marginTop: 8 }}
-            onClick={() => fileRef.current?.click()}>
+          <Row label="Member since" value={user?.created_at ? new Date(user.created_at).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' }) : '—'} />
+          <button className="input" style={{ background: 'var(--bg-card)', border: '1px dashed var(--border)', cursor: 'pointer', textAlign: 'center', color: 'var(--text-secondary)', marginTop: 8 }} onClick={() => fileRef.current?.click()}>
             📷 {avatarFile ? 'Photo selected ✓' : 'Change Profile Photo'}
           </button>
-
           {profileChanged && (
             <button className="btn btn-primary w-full" onClick={saveProfile} disabled={saving} style={{ marginTop: 14 }}>
               {saving ? '⏳ Saving...' : '💾 Save Changes'}
@@ -145,57 +162,89 @@ export default function Settings() {
           )}
         </Section>
 
-        {/* ── PRIVACY & SECURITY ── */}
-        <Section icon="🔒" label="Privacy & Security" sub="Password change" open={section === 'privacy'} onToggle={() => setSection(p => p === 'privacy' ? null : 'privacy')}>
-          <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 14 }}>
-            Change your login password. You'll need your current password.
-          </p>
+        {/* PRIVACY */}
+        <Section icon="🔒" label="Privacy & Security" sub="Change password" open={section==='privacy'} onToggle={() => setSection(p => p==='privacy' ? null : 'privacy')}>
           <form onSubmit={changePassword} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <input className="input" type="password" placeholder="Current password"
-              value={pwForm.current} onChange={e => setPwForm(p => ({ ...p, current: e.target.value }))} required />
-            <input className="input" type="password" placeholder="New password (min 6 chars)"
-              value={pwForm.next} onChange={e => setPwForm(p => ({ ...p, next: e.target.value }))} required />
-            <input className="input" type="password" placeholder="Confirm new password"
-              value={pwForm.confirm} onChange={e => setPwForm(p => ({ ...p, confirm: e.target.value }))} required />
-            <button className="btn btn-primary" type="submit" disabled={saving}>
-              {saving ? 'Changing...' : '🔑 Change Password'}
-            </button>
+            <PwInput value={pwForm.current} onChange={e => setPwForm(p => ({ ...p, current: e.target.value }))} placeholder="Current password" autoComplete="current-password" />
+            <PwInput value={pwForm.next}    onChange={e => setPwForm(p => ({ ...p, next: e.target.value }))}    placeholder="New password (min 6)" autoComplete="new-password" />
+            <PwInput value={pwForm.confirm} onChange={e => setPwForm(p => ({ ...p, confirm: e.target.value }))} placeholder="Confirm new password" autoComplete="new-password" />
+            <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : '🔑 Change Password'}</button>
           </form>
         </Section>
 
-        {/* ── THEME ── */}
-        <Section icon="🎨" label="Theme" sub="Change app color scheme" open={section === 'theme'} onToggle={() => setSection(p => p === 'theme' ? null : 'theme')}>
-          <p style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 12 }}>Select a theme. Changes apply instantly.</p>
+        {/* NOTIFICATIONS */}
+        <Section icon="🔔" label="Notifications" sub="Message and call alerts" open={section==='notifs'} onToggle={() => setSection(p => p==='notifs' ? null : 'notifs')}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>Browser Notifications</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Get alerts for messages and calls</div>
+            </div>
+            <button onClick={toggleNotifications}
+              style={{ width: 48, height: 26, borderRadius: 13, border: 'none', cursor: 'pointer', background: notifEnabled ? 'var(--accent-primary)' : 'var(--bg-card)', transition: 'background .2s', position: 'relative' }}>
+              <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: notifEnabled ? 25 : 3, transition: 'left .2s' }} />
+            </button>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 10 }}>
+            {notifEnabled
+              ? '✅ Notifications ON — you\'ll be alerted for messages, calls, and friend requests'
+              : '🔕 Notifications OFF — enable to get alerts even when the app is in the background'}
+          </div>
+          {notifEnabled && 'Notification' in window && Notification.permission !== 'granted' && (
+            <div style={{ fontSize: 12, color: 'var(--warning)', marginTop: 8 }}>
+              ⚠️ Browser permission not granted. Click the toggle to request permission.
+            </div>
+          )}
+        </Section>
+
+        {/* THEME */}
+        <Section icon="🎨" label="Theme" sub="App color scheme" open={section==='theme'} onToggle={() => setSection(p => p==='theme' ? null : 'theme')}>
           {Object.entries(THEMES).map(([key, t]) => (
             <div key={key} onClick={() => handleTheme(key)}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px', marginBottom: 6, borderRadius: 'var(--radius-sm)', border: `2px solid ${currentTheme === key ? t.accent : 'var(--border)'}`, cursor: 'pointer', background: currentTheme === key ? 'var(--bg-hover)' : 'transparent' }}>
+              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, marginBottom: 6, borderRadius: 'var(--radius-sm)', border: `2px solid ${theme===key ? t.accent : 'var(--border)'}`, cursor: 'pointer', background: theme===key ? 'var(--bg-hover)' : 'transparent' }}>
               <div style={{ width: 32, height: 32, borderRadius: 8, background: t.bg, border: `3px solid ${t.accent}`, flexShrink: 0 }} />
               <span style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>{t.label}</span>
-              {currentTheme === key && <span style={{ color: t.accent, fontWeight: 800 }}>✓</span>}
+              {theme===key && <span style={{ color: t.accent, fontWeight: 800 }}>✓</span>}
             </div>
           ))}
         </Section>
 
-        {/* ── NOTIFICATIONS ── */}
-        <Section icon="🔔" label="Notifications" sub="Sound, alerts" open={section === 'notifs'} onToggle={() => setSection(p => p === 'notifs' ? null : 'notifs')}>
-          <div style={s.infoRow}><span style={s.infoLbl}>Message sounds</span><span style={s.infoVal}>✅ Enabled</span></div>
-          <div style={s.infoRow}><span style={s.infoLbl}>Call alerts</span><span style={s.infoVal}>✅ Enabled</span></div>
-          <div style={s.infoRow}><span style={s.infoLbl}>Group notifications</span><span style={s.infoVal}>✅ Enabled</span></div>
-          <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 8 }}>Full per-chat notification controls coming soon.</p>
+        {/* ABOUT */}
+        <Section icon="ℹ️" label="About AuraChat" sub="Version info" open={section==='about'} onToggle={() => setSection(p => p==='about' ? null : 'about')}>
+          <Row label="Version"   value="3.0.0" />
+          <Row label="Frontend"  value="React 18 + Vite" />
+          <Row label="Backend"   value="Node.js + Socket.io" />
+          <Row label="Database"  value="PostgreSQL (Neon)" />
+          <Row label="Calling"   value="WebRTC (native)" />
+          <Row label="Real-time" value="Socket.io v4" />
         </Section>
 
-        {/* ── ABOUT ── */}
-        <Section icon="ℹ️" label="About AuraChat" sub="Version, tech stack" open={section === 'about'} onToggle={() => setSection(p => p === 'about' ? null : 'about')}>
-          <div style={s.infoRow}><span style={s.infoLbl}>Version</span><span style={s.infoVal}>2.0.0</span></div>
-          <div style={s.infoRow}><span style={s.infoLbl}>Frontend</span><span style={s.infoVal}>React 18 + Vite</span></div>
-          <div style={s.infoRow}><span style={s.infoLbl}>Backend</span><span style={s.infoVal}>Node.js + Socket.io</span></div>
-          <div style={s.infoRow}><span style={s.infoLbl}>Database</span><span style={s.infoVal}>PostgreSQL (Neon)</span></div>
-          <div style={s.infoRow}><span style={s.infoLbl}>Video calls</span><span style={s.infoVal}>Jitsi Meet (free)</span></div>
-          <div style={s.infoRow}><span style={s.infoLbl}>Images</span><span style={s.infoVal}>Compressed → WebP 200px</span></div>
-          <div style={s.infoRow}><span style={s.infoLbl}>Real-time</span><span style={s.infoVal}>Socket.io v4</span></div>
+        {/* DANGER ZONE */}
+        <Section icon="⚠️" label="Danger Zone" sub="Delete account" open={section==='danger'} onToggle={() => setSection(p => p==='danger' ? null : 'danger')}>
+          <div style={{ background: 'rgba(225,112,85,.1)', border: '1px solid rgba(225,112,85,.3)', borderRadius: 'var(--radius-sm)', padding: 14, marginBottom: 14 }}>
+            <div style={{ fontWeight: 700, color: 'var(--danger)', marginBottom: 6 }}>⚠️ Permanently Delete Account</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
+              This will delete ALL your data — messages, friends, groups — forever. This cannot be undone.
+            </div>
+            {!showDeleteConfirm ? (
+              <button className="btn btn-danger" onClick={() => setShowDeleteConfirm(true)} style={{ padding: '8px 16px' }}>
+                Delete My Account
+              </button>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <PwInput value={deletePass} onChange={e => setDeletePass(e.target.value)} placeholder="Enter your password to confirm" autoComplete="current-password" />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-danger" onClick={deleteAccount} disabled={!deletePass} style={{ flex: 1 }}>
+                    ✓ Confirm Delete
+                  </button>
+                  <button className="btn btn-ghost" onClick={() => { setShowDeleteConfirm(false); setDeletePass(''); }} style={{ padding: '10px 16px' }}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </Section>
 
-        {/* Sign out */}
         <div style={{ padding: '16px 16px 40px' }}>
           <button className="btn btn-danger w-full" onClick={logout} style={{ padding: 14, fontSize: 15 }}>
             🚪 Sign Out
@@ -206,32 +255,37 @@ export default function Settings() {
   );
 }
 
+function Row({ label, value }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)', fontSize: 14 }}>
+      <span style={{ color: 'var(--text-secondary)' }}>{label}</span>
+      <span style={{ color: 'var(--accent-secondary)', fontWeight: 600 }}>{value}</span>
+    </div>
+  );
+}
+
 function Section({ icon, label, sub, open, onToggle, children }) {
   return (
     <div>
-      <div onClick={onToggle} style={s.menuItem}>
-        <span style={s.menuIcon}>{icon}</span>
+      <div onClick={onToggle} style={s.item}>
+        <span style={s.icon}>{icon}</span>
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 600, fontSize: 15 }}>{label}</div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{sub}</div>
         </div>
-        <span style={{ color: 'var(--text-muted)', fontSize: 20, transition: 'transform .2s', display: 'inline-block', transform: open ? 'rotate(90deg)' : 'none' }}>›</span>
+        <span style={{ color: 'var(--text-muted)', fontSize: 20, transition: 'transform .2s', transform: open ? 'rotate(90deg)' : 'none', display: 'inline-block' }}>›</span>
       </div>
-      {open && <div style={s.sectionContent}>{children}</div>}
+      {open && <div style={s.content}>{children}</div>}
     </div>
   );
 }
 
 const s = {
-  page: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-primary)' },
-  profileCard: { display: 'flex', alignItems: 'center', gap: 16, padding: '20px 16px 16px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' },
-  cam: { position: 'absolute', bottom: 0, right: 0, background: 'var(--accent-primary)', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11 },
-  msgBar: { padding: '10px 16px', fontSize: 13, fontWeight: 600 },
-  menuItem: { display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', cursor: 'pointer', borderBottom: '1px solid var(--border)', userSelect: 'none' },
-  menuIcon: { width: 38, height: 38, borderRadius: 10, background: 'var(--bg-card)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 },
-  sectionContent: { padding: '16px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' },
-  fieldLabel: { display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 },
-  infoRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)', fontSize: 14 },
-  infoLbl: { color: 'var(--text-secondary)' },
-  infoVal: { color: 'var(--accent-secondary)', fontWeight: 600 },
+  page:    { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-primary)', width: '100%' },
+  card:    { display: 'flex', alignItems: 'center', gap: 16, padding: '20px 16px 16px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', flexShrink: 0 },
+  cam:     { position: 'absolute', bottom: 0, right: 0, background: 'var(--accent-primary)', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11 },
+  item:    { display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', cursor: 'pointer', borderBottom: '1px solid var(--border)', userSelect: 'none' },
+  icon:    { width: 38, height: 38, borderRadius: 10, background: 'var(--bg-card)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 },
+  content: { padding: 16, background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' },
+  lbl:     { display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 },
 };
