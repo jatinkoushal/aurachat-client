@@ -1,9 +1,7 @@
 import axios from 'axios';
 
-const BACKEND_URL = 'https://aurachat-server.onrender.com';
-
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || BACKEND_URL,
+  baseURL: 'https://aurachat-server.onrender.com',
   withCredentials: true,
 });
 
