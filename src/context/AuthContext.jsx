@@ -11,27 +11,39 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     if (hasFetched.current) return;
     hasFetched.current = true;
-
     api.get('/api/auth/me')
-      .then(res => setUser(res.data.user))
-      .catch(() => setUser(null))
+      .then(res => {
+        setUser(res.data.user);
+        // Store socket token so SocketContext can authenticate
+        if (res.data.socketToken) {
+          localStorage.setItem('socket_token', res.data.socketToken);
+        }
+      })
+      .catch(() => {
+        setUser(null);
+        localStorage.removeItem('socket_token');
+      })
       .finally(() => setLoading(false));
   }, []);
 
   const login = async (username, password) => {
-    const res = await api.post('/api/auth/login', { username, password });
+    // FIX: trim username before sending
+    const res = await api.post('/api/auth/login', { username: username.trim(), password });
     setUser(res.data.user);
+    if (res.data.socketToken) localStorage.setItem('socket_token', res.data.socketToken);
     return res.data.user;
   };
 
   const register = async (username, password) => {
-    const res = await api.post('/api/auth/register', { username, password });
+    const res = await api.post('/api/auth/register', { username: username.trim(), password });
     setUser(res.data.user);
+    if (res.data.socketToken) localStorage.setItem('socket_token', res.data.socketToken);
     return res.data.user;
   };
 
   const logout = async () => {
     try { await api.post('/api/auth/logout'); } catch {}
+    localStorage.removeItem('socket_token');
     setUser(null);
   };
 
