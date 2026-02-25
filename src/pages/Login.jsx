@@ -2,6 +2,22 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
+function PasswordInput({ value, onChange, placeholder, autoComplete }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div style={{ position: 'relative' }}>
+      <input className="input" type={show ? 'text' : 'password'}
+        placeholder={placeholder} value={value} onChange={onChange}
+        autoComplete={autoComplete} required
+        style={{ paddingRight: 44 }} />
+      <button type="button" onClick={() => setShow(s => !s)}
+        style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--text-muted)', padding: 0, lineHeight: 1 }}>
+        {show ? '🙈' : '👁️'}
+      </button>
+    </div>
+  );
+}
+
 export default function Login() {
   const [form, setForm] = useState({ username: '', password: '' });
   const [error, setError] = useState('');
@@ -10,118 +26,51 @@ export default function Login() {
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      await login(form.username, form.password);
-      navigate('/chats');
-    } catch (err) {
-      setError(err.response?.data?.error || 'Login failed');
-    } finally {
-      setLoading(false);
-    }
+    e.preventDefault(); setError(''); setLoading(true);
+    try { await login(form.username, form.password); navigate('/chats'); }
+    catch (err) { setError(err.response?.data?.error || 'Login failed'); }
+    finally { setLoading(false); }
   };
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card} className="fade-in">
-        <div style={styles.logo}>⬡</div>
-        <h1 style={styles.title}>AuraChat</h1>
-        <p style={styles.subtitle}>Sign in to continue</p>
-
-        <form onSubmit={handleSubmit} style={styles.form}>
-          <div style={styles.field}>
-            <label style={styles.label}>Username</label>
-            <input
-              className="input"
-              type="text"
-              placeholder="Enter your username"
-              value={form.username}
-              onChange={e => setForm(p => ({ ...p, username: e.target.value }))}
-              autoComplete="username"
-              required
-            />
+    <div style={s.page}>
+      <div style={s.card} className="fade-in">
+        <div style={s.logo}>⬡</div>
+        <h1 style={s.title}>AuraChat</h1>
+        <p style={s.sub}>Sign in to continue</p>
+        <form onSubmit={handleSubmit} style={s.form}>
+          <div style={s.field}>
+            <label style={s.label}>Username</label>
+            <input className="input" type="text" placeholder="Enter username"
+              value={form.username} onChange={e => setForm(p => ({ ...p, username: e.target.value }))}
+              autoComplete="username" required />
           </div>
-          <div style={styles.field}>
-            <label style={styles.label}>Password</label>
-            <input
-              className="input"
-              type="password"
-              placeholder="Enter your password"
-              value={form.password}
-              onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
-              autoComplete="current-password"
-              required
-            />
+          <div style={s.field}>
+            <label style={s.label}>Password</label>
+            <PasswordInput value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
+              placeholder="Enter password" autoComplete="current-password" />
           </div>
-          {error && <p style={styles.error}>{error}</p>}
+          {error && <p style={s.error}>{error}</p>}
           <button className="btn btn-primary w-full" type="submit" disabled={loading}>
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
-
-        <p style={styles.footer}>
-          Don't have an account?{' '}
-          <Link to="/register" style={styles.link}>Create one</Link>
-        </p>
+        <p style={s.footer}>Don't have an account? <Link to="/register" style={s.link}>Create one</Link></p>
       </div>
     </div>
   );
 }
 
-const styles = {
-  page: {
-    minHeight: '100dvh',
-    background: 'var(--bg-primary)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '20px',
-  },
-  card: {
-    background: 'var(--bg-secondary)',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius)',
-    padding: '40px',
-    width: '100%',
-    maxWidth: '400px',
-    boxShadow: 'var(--shadow)',
-    textAlign: 'center',
-  },
-  logo: {
-    fontSize: '48px',
-    color: 'var(--accent-primary)',
-    marginBottom: '8px',
-  },
-  title: {
-    fontSize: '28px',
-    fontWeight: '800',
-    color: 'var(--text-primary)',
-    marginBottom: '4px',
-  },
-  subtitle: {
-    color: 'var(--text-muted)',
-    fontSize: '14px',
-    marginBottom: '32px',
-  },
-  form: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-    textAlign: 'left',
-  },
-  field: { display: 'flex', flexDirection: 'column', gap: '6px' },
-  label: { fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)' },
-  error: {
-    background: 'rgba(225,112,85,0.15)',
-    border: '1px solid var(--danger)',
-    borderRadius: 'var(--radius-sm)',
-    color: 'var(--danger)',
-    padding: '10px 14px',
-    fontSize: '13px',
-    textAlign: 'center',
-  },
-  footer: { marginTop: '24px', color: 'var(--text-muted)', fontSize: '14px' },
-  link: { color: 'var(--accent-primary)', textDecoration: 'none', fontWeight: '600' },
+const s = {
+  page: { minHeight:'100dvh', background:'var(--bg-primary)', display:'flex', alignItems:'center', justifyContent:'center', padding:20 },
+  card: { background:'var(--bg-secondary)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:40, width:'100%', maxWidth:400, boxShadow:'var(--shadow)', textAlign:'center' },
+  logo: { fontSize:48, color:'var(--accent-primary)', marginBottom:8 },
+  title: { fontSize:28, fontWeight:800, marginBottom:4 },
+  sub: { color:'var(--text-muted)', fontSize:14, marginBottom:32 },
+  form: { display:'flex', flexDirection:'column', gap:16, textAlign:'left' },
+  field: { display:'flex', flexDirection:'column', gap:6 },
+  label: { fontSize:13, fontWeight:600, color:'var(--text-secondary)' },
+  error: { background:'rgba(225,112,85,.15)', border:'1px solid var(--danger)', borderRadius:'var(--radius-sm)', color:'var(--danger)', padding:'10px 14px', fontSize:13, textAlign:'center' },
+  footer: { marginTop:24, color:'var(--text-muted)', fontSize:14 },
+  link: { color:'var(--accent-primary)', textDecoration:'none', fontWeight:600 },
 };
