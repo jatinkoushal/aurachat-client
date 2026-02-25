@@ -1,68 +1,71 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from './AuthContext';
 
 const SocketContext = createContext(null);
 const BACKEND = 'https://aurachat-server.onrender.com';
 
+function notify(title, body) {
+  if (localStorage.getItem('notif_enabled') === 'false') return;
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  // Only notify when tab not focused
+  if (document.visibilityState === 'visible') return;
+  new Notification(title, { body, icon: '/favicon.ico' });
+}
+
 export const SocketProvider = ({ children }) => {
   const { user } = useAuth();
   const socketRef = useRef(null);
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [incomingCall, setIncomingCall] = useState(null);
-  // Use state so consumers re-render when socket connects
   const [socket, setSocket] = useState(null);
 
   useEffect(() => {
     if (!user) {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-        socketRef.current = null;
-        setSocket(null);
-      }
+      socketRef.current?.disconnect();
+      socketRef.current = null;
+      setSocket(null);
       return;
     }
-
     const token = localStorage.getItem('socket_token');
-    if (!token) {
-      console.warn('No socket token found — socket will not connect');
-      return;
-    }
+    if (!token) return;
 
     const s = io(BACKEND, {
       withCredentials: true,
       auth: { token },
       reconnection: true,
       reconnectionDelay: 1000,
+      reconnectionAttempts: Infinity,
     });
-
     socketRef.current = s;
     setSocket(s);
 
-    s.on('connect', () => console.log('✅ Socket connected'));
-    s.on('connect_error', (err) => console.error('Socket error:', err.message));
+    s.on('connect',       () => console.log('✅ Socket connected', s.id));
+    s.on('connect_error', err => console.error('Socket error:', err.message));
 
-    s.on('user:status', ({ userId, isOnline }) => {
-      setOnlineUsers(prev => {
-        const next = new Set(prev);
-        if (isOnline) next.add(userId);
-        else next.delete(userId);
-        return next;
-      });
+    // FIX: separate events = accurate online/offline tracking
+    s.on('user:online',  ({ userId }) => setOnlineUsers(p => { const n = new Set(p); n.add(userId);    return n; }));
+    s.on('user:offline', ({ userId }) => setOnlineUsers(p => { const n = new Set(p); n.delete(userId); return n; }));
+
+    // Notifications for incoming messages
+    s.on('message:receive', msg => {
+      if (msg.sender_id !== user.id) {
+        notify(`💬 ${msg.username || 'New message'}`, msg.msg_type === 'call' ? '📞 Missed call' : msg.content);
+      }
     });
 
-    s.on('call:incoming', (data) => setIncomingCall(data));
+    // Incoming call
+    s.on('call:incoming', data => {
+      setIncomingCall(data);
+      notify(`📞 Incoming ${data.callType} call`, `${data.fromUsername} is calling you`);
+    });
     s.on('call:rejected', () => setIncomingCall(null));
-    s.on('call:ended', () => setIncomingCall(null));
+    s.on('call:ended',    () => setIncomingCall(null));
 
-    return () => {
-      s.disconnect();
-      socketRef.current = null;
-      setSocket(null);
-    };
+    return () => { s.disconnect(); socketRef.current = null; setSocket(null); };
   }, [user]);
 
-  const isOnline = (userId) => onlineUsers.has(userId);
+  const isOnline = useCallback(uid => onlineUsers.has(uid), [onlineUsers]);
 
   return (
     <SocketContext.Provider value={{ socket, isOnline, onlineUsers, incomingCall, setIncomingCall }}>
