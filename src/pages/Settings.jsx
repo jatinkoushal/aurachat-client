@@ -144,17 +144,19 @@ export default function Settings() {
 
   // ── Profile privacy ───────────────────────────────────────────────────────
   const toggleProfilePrivate = async (value) => {
-    const next = value !== undefined ? value : !profilePrivate;
+    const next = (value !== undefined && value !== null) ? Boolean(value) : !profilePrivate;
     if (next === profilePrivate) return;
     setSavingPrivacy(true);
     try {
-      const fd = new FormData();
-      fd.append('profile_private', String(next));
-      const res = await api.patch('/api/auth/profile', fd);
+      // Use dedicated /privacy endpoint with JSON to avoid multipart/multer issues
+      const res = await api.patch('/api/auth/privacy', { profile_private: next });
       setUser(p => ({ ...p, ...res.data.user }));
       setProfilePrivate(next);
       flash(next ? '👥 Profile now visible to friends only' : '🌍 Profile is now public to everyone');
-    } catch (err) { flash('❌ Failed to update privacy', false); }
+    } catch (err) {
+      console.error('Privacy update error:', err.response?.data || err.message);
+      flash('❌ Failed to update privacy — please try again', false);
+    }
     finally { setSavingPrivacy(false); }
   };
 
