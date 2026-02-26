@@ -211,7 +211,9 @@ function GroupChat({ group, currentUser, onBack, friends }) {
   const [editingMsgId, setEditingMsgId] = useState(null);
   const [editingText, setEditingText] = useState('');
   const [contextMenu, setContextMenu] = useState(null);
-  const bottomRef = useRef();
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const bottomRef  = useRef();
+  const ctxMenuRef = useRef();
   const editFileRef = useRef();
   const editMsgRef = useRef();
 
@@ -222,9 +224,16 @@ function GroupChat({ group, currentUser, onBack, friends }) {
   useEffect(() => { loadDetails(); }, [group.id]);
 
   useEffect(() => {
-    const h = e => setContextMenu(null);
+    const h = e => {
+      // Only close if tap is outside the menu
+      if (ctxMenuRef.current && !ctxMenuRef.current.contains(e.target)) setContextMenu(null);
+    };
     document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
+    document.addEventListener('touchstart', h, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', h);
+      document.removeEventListener('touchstart', h);
+    };
   }, []);
 
   useEffect(() => { if (editingMsgId) setTimeout(() => editMsgRef.current?.focus(), 50); }, [editingMsgId]);
@@ -274,8 +283,12 @@ function GroupChat({ group, currentUser, onBack, friends }) {
 
   const handleMsgDelete = msgId => {
     if (String(msgId).startsWith('tmp_')) return;
-    if (!window.confirm('Delete this message?')) return;
-    deleteMessage(msgId); setContextMenu(null);
+    setContextMenu(null);
+    setDeleteConfirm(msgId);
+  };
+  const confirmMsgDelete = () => {
+    if (deleteConfirm) deleteMessage(deleteConfirm);
+    setDeleteConfirm(null);
   };
 
   const notInGroup = friends.filter(f => !details?.members?.find(m => m.id === f.user_id));
@@ -349,7 +362,10 @@ function GroupChat({ group, currentUser, onBack, friends }) {
       )}
 
       {/* Messages */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 6 }} onClick={() => setContextMenu(null)}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 6 }} onClick={e => {
+        if (ctxMenuRef.current && ctxMenuRef.current.contains(e.target)) return;
+        setContextMenu(null);
+      }}>
         {loading && <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>}
         {!loading && messages.length === 0 && <div style={{ textAlign: 'center', color: 'var(--text-muted)', marginTop: 40, fontSize: 14 }}>No messages yet. Say something! 👋</div>}
         {messages.map((msg, i) => {
@@ -365,11 +381,14 @@ function GroupChat({ group, currentUser, onBack, friends }) {
               }}
               onTouchStart={e => {
                 if (!isMe || msg.deleted || msg.msg_type === 'call' || String(msg.id).startsWith('tmp_')) return;
-                const touch = e.touches[0];
+                // Capture coords now — React pools event objects so touch is invalid after timeout
+                const x = e.touches[0]?.clientX ?? 100;
+                const y = e.touches[0]?.clientY ?? 100;
+                const el = e.currentTarget;
                 const t = setTimeout(() => {
-                  setContextMenu({ msgId: msg.id, msg, x: touch.clientX, y: touch.clientY });
+                  setContextMenu({ msgId: msg.id, msg, x, y });
                 }, 600);
-                e.currentTarget._pressTimer = t;
+                el._pressTimer = t;
               }}
               onTouchEnd={e => { clearTimeout(e.currentTarget._pressTimer); }}
               onTouchMove={e => { clearTimeout(e.currentTarget._pressTimer); }}>
@@ -403,15 +422,34 @@ function GroupChat({ group, currentUser, onBack, friends }) {
 
       {/* Context menu */}
       {contextMenu && (
-        <div style={{ position: 'fixed', top: contextMenu.y, left: contextMenu.x, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: 4, zIndex: 500, minWidth: 140, boxShadow: '0 8px 24px rgba(0,0,0,.5)' }}>
-          <button onClick={() => { setEditingMsgId(contextMenu.msgId); setEditingText(contextMenu.msg.content); setContextMenu(null); }}
-            style={{ display: 'block', width: '100%', padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 13, color: 'var(--text-primary)', borderRadius: 6 }}>
-            ✏️ Edit message
+        <div ref={ctxMenuRef}
+          onMouseDown={e => e.stopPropagation()}
+          onTouchStart={e => e.stopPropagation()}
+          style={{ position: 'fixed', top: Math.min(contextMenu.y, window.innerHeight - 120), left: Math.min(contextMenu.x, window.innerWidth - 170), background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 4, zIndex: 600, minWidth: 160, boxShadow: '0 8px 32px rgba(0,0,0,.7)' }}>
+          <button onPointerDown={e => { e.stopPropagation(); setEditingMsgId(contextMenu.msgId); setEditingText(contextMenu.msg.content); setContextMenu(null); }}
+            style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 13, color: 'var(--text-primary)', borderRadius: 6 }}>
+            ✏️ Edit
           </button>
-          <button onClick={() => handleMsgDelete(contextMenu.msgId)}
-            style={{ display: 'block', width: '100%', padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 13, color: 'var(--danger)', borderRadius: 6 }}>
-            🗑️ Delete message
+          <button onPointerDown={e => { e.stopPropagation(); handleMsgDelete(contextMenu.msgId); }}
+            style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 13, color: 'var(--danger)', borderRadius: 6 }}>
+            🗑️ Delete
           </button>
+        </div>
+      )}
+
+      {/* Inline delete confirm — replaces window.confirm blocked on Android */}
+      {deleteConfirm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 700 }}
+          onClick={() => setDeleteConfirm(null)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: '24px 28px', textAlign: 'center', maxWidth: 300, width: '90%' }}>
+            <div style={{ fontSize: 28, marginBottom: 10 }}>🗑️</div>
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>Delete message?</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>This cannot be undone.</div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <button className="btn btn-ghost" onClick={() => setDeleteConfirm(null)} style={{ flex: 1 }}>Cancel</button>
+              <button className="btn btn-danger" onClick={confirmMsgDelete} style={{ flex: 1 }}>Delete</button>
+            </div>
+          </div>
         </div>
       )}
 
