@@ -7,13 +7,12 @@ import WebRTCCall from '../components/VideoCall/WebRTCCall';
 import api from '../services/api';
 
 export default function Chats() {
-  const { user }                       = useAuth();
-  const { isOnline, socket, onlineUsers } = useSocket();
-  const [friends,    setFriends]       = useState([]);
-  const [selected,   setSelected]      = useState(null);
-  const [activeCall, setActiveCall]    = useState(null);
-  // unreadMap: { [userId]: count }
-  const [unreadMap,  setUnreadMap]     = useState({});
+  const { user }                          = useAuth();
+  const { isOnline, socket }              = useSocket();
+  const [friends,    setFriends]          = useState([]);
+  const [selected,   setSelected]         = useState(null);
+  const [activeCall, setActiveCall]       = useState(null);
+  const [unreadMap,  setUnreadMap]        = useState({});
 
   const loadFriends = useCallback(() => {
     api.get('/api/relationships')
@@ -25,16 +24,12 @@ export default function Chats() {
 
   useEffect(() => { loadFriends(); }, [loadFriends]);
 
-  // Track unread: increment when a message arrives for a non-selected conversation
   useEffect(() => {
     if (!socket) return;
     const onMsg = (msg) => {
-      if (msg.sender_id === user?.id) return; // ignore own
-      if (msg.msg_type === 'call') return;    // ignore call logs
-      const fromId = msg.sender_id;
-      // Only count as unread if this chat is NOT currently open
-      if (selected?.user_id !== fromId) {
-        setUnreadMap(prev => ({ ...prev, [fromId]: (prev[fromId] || 0) + 1 }));
+      if (!msg || msg.sender_id === user?.id || msg.msg_type === 'call') return;
+      if (selected?.user_id !== msg.sender_id) {
+        setUnreadMap(prev => ({ ...prev, [msg.sender_id]: (prev[msg.sender_id] || 0) + 1 }));
       }
     };
     socket.on('message:receive', onMsg);
@@ -49,7 +44,6 @@ export default function Chats() {
 
   const selectFriend = (rel) => {
     setSelected(rel);
-    // Clear unread badge for this friend
     setUnreadMap(prev => { const n = { ...prev }; delete n[rel.user_id]; return n; });
   };
 
@@ -65,37 +59,57 @@ export default function Chats() {
     );
   }
 
+  // On mobile: show EITHER the sidebar list OR the chat window (not both)
+  // On desktop (640px+): show both side by side via CSS
   return (
-    <div style={st.root}>
-      {/* Sidebar */}
-      <div style={{ ...st.sidebar, display: selected ? 'none' : 'flex' }} className="chat-sidebar chat-sidebar-desktop">
-        <div style={st.sidebarHead}>
+    <div style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }}>
+
+      {/* ── Friend list sidebar ─────────────────────────────── */}
+      <div
+        className="chat-sidebar"
+        style={{
+          width: '100%',           // full width on mobile
+          flexShrink: 0,
+          background: 'var(--bg-secondary)',
+          borderRight: '1px solid var(--border)',
+          display: selected ? 'none' : 'flex',  // hide when chat open on mobile
+          flexDirection: 'column',
+          height: '100%',
+          overflowY: 'auto',
+        }}
+      >
+        <div style={{ padding: '14px 14px 10px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
           <h2 style={{ fontSize: 18, fontWeight: 800 }}>Chats</h2>
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{friends.length}</span>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: 6 }}>
           {friends.length === 0 && (
-            <div style={st.empty}>
+            <div style={{ padding: '40px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>
               <div style={{ fontSize: 36 }}>💬</div>
               <div style={{ marginTop: 8 }}>No friends yet</div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Add friends in People tab</div>
+              <div style={{ fontSize: 12, marginTop: 4 }}>Add friends in People tab</div>
             </div>
           )}
           {friends.map(rel => {
-            const online  = isOnline(rel.user_id);
-            const unread  = unreadMap[rel.user_id] || 0;
-            const isOpen  = selected?.user_id === rel.user_id;
+            const online = isOnline(rel.user_id);
+            const unread = unreadMap[rel.user_id] || 0;
+            const isOpen = selected?.user_id === rel.user_id;
             return (
-              <div key={rel.id} onClick={() => selectFriend(rel)}
-                style={{ ...st.friendRow, background: isOpen ? 'var(--bg-card)' : 'transparent' }}>
+              <div
+                key={rel.id}
+                onClick={() => selectFriend(rel)}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, borderRadius: 8, cursor: 'pointer', background: isOpen ? 'var(--bg-card)' : 'transparent', marginBottom: 2 }}
+              >
                 <div style={{ position: 'relative' }}>
                   <Avatar username={rel.username} avatarUrl={rel.avatar_url} size="md" online={online} />
                   {unread > 0 && (
-                    <span style={st.unreadBadge}>{unread > 99 ? '99+' : unread}</span>
+                    <span style={{ position: 'absolute', top: -3, right: -3, minWidth: 18, height: 18, borderRadius: 999, background: '#e53e3e', color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', border: '2px solid var(--bg-secondary)', zIndex: 1 }}>
+                      {unread > 99 ? '99+' : unread}
+                    </span>
                   )}
                 </div>
                 <div style={{ flex: 1, overflow: 'hidden' }}>
-                  <div style={{ ...st.friendName, fontWeight: unread > 0 ? 800 : 600 }}>{rel.username}</div>
+                  <div style={{ fontSize: 14, fontWeight: unread > 0 ? 800 : 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rel.username}</div>
                   <div style={{ fontSize: 12, color: online ? 'var(--online-green)' : 'var(--text-muted)' }}>
                     {online ? '🟢 Online' : '⚫ Offline'}
                   </div>
@@ -106,8 +120,18 @@ export default function Chats() {
         </div>
       </div>
 
-      {/* Chat area */}
-      <div style={st.chatArea}>
+      {/* ── Chat area ───────────────────────────────────────── */}
+      <div
+        style={{
+          flex: 1,
+          display: selected ? 'flex' : 'none',   // only show when chat open on mobile
+          flexDirection: 'column',
+          height: '100%',
+          overflow: 'hidden',
+          minWidth: 0,
+        }}
+        className="chat-area-pane"
+      >
         {selected ? (
           <ChatWindow
             key={selected.user_id}
@@ -118,15 +142,27 @@ export default function Chats() {
             onBack={() => setSelected(null)}
           />
         ) : (
-          <div style={st.placeholder}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ fontSize: 56 }}>💬</div>
             <p style={{ color: 'var(--text-muted)', marginTop: 12 }}>Select a chat to start messaging</p>
           </div>
         )}
       </div>
+
       <style>{`
-        @media(min-width:640px){.chat-sidebar{display:flex !important;}}
-        @media(min-width:1025px){.chat-sidebar-desktop{width:320px !important;}}
+        /* Desktop: show both sidebar and chat side by side */
+        @media (min-width: 640px) {
+          .chat-sidebar {
+            display: flex !important;
+            width: 280px !important;
+          }
+          .chat-area-pane {
+            display: flex !important;
+          }
+        }
+        @media (min-width: 1025px) {
+          .chat-sidebar { width: 320px !important; }
+        }
       `}</style>
     </div>
   );
@@ -149,9 +185,7 @@ function CallBubble({ msg, isMe }) {
       <div style={{ flex: 1 }}>
         <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 3 }}>{label}</div>
         <div style={{ fontSize: 11, opacity: .85, display: 'flex', alignItems: 'center', gap: 5 }}>
-          {missed
-            ? <span>✖️ Not connected</span>
-            : <span>✔️ {durText}</span>}
+          {missed ? <span>✖️ Missed</span> : <span>✔️ {durText}</span>}
           <span style={{ opacity: .5 }}>•</span>
           <span>{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
         </div>
@@ -160,17 +194,17 @@ function CallBubble({ msg, isMe }) {
   );
 }
 
-// ── Chat window (individual conversation) ───────────────────────────────────
+// ── Chat window ──────────────────────────────────────────────────────────────
 function ChatWindow({ friend, currentUser, isOnline, onCall, onBack }) {
   const { messages, loading, sendMessage, editMessage, deleteMessage, emitTyping, typing, markRead } =
     useChat(friend.user_id);
 
-  const [input,       setInput]       = useState('');
-  const [showCallMenu, setShowCallMenu] = useState(false);
-  const [editingId,    setEditingId]   = useState(null);
-  const [editText,     setEditText]    = useState('');
-  const [contextMenu,  setContextMenu] = useState(null);
-  const [deleteConfirm, setDeleteConfirm] = useState(null); // msgId awaiting confirm
+  const [input,         setInput]         = useState('');
+  const [showCallMenu,  setShowCallMenu]  = useState(false);
+  const [editingId,     setEditingId]     = useState(null);
+  const [editText,      setEditText]      = useState('');
+  const [contextMenu,   setContextMenu]   = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   const bottomRef    = useRef(null);
   const callMenuRef  = useRef(null);
@@ -178,14 +212,12 @@ function ChatWindow({ friend, currentUser, isOnline, onCall, onBack }) {
   const editInputRef = useRef(null);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
-
-  // Mark messages read when window is open
   useEffect(() => { markRead(); }, [messages, markRead]);
 
+  // Close dropdowns when tapping outside
   useEffect(() => {
     const handler = e => {
       if (callMenuRef.current && !callMenuRef.current.contains(e.target)) setShowCallMenu(false);
-      // Only close context menu if tap is OUTSIDE the menu — not inside it
       if (ctxMenuRef.current && !ctxMenuRef.current.contains(e.target)) setContextMenu(null);
     };
     document.addEventListener('mousedown', handler);
@@ -208,7 +240,6 @@ function ChatWindow({ friend, currentUser, isOnline, onCall, onBack }) {
   };
 
   const startEdit = (msg) => {
-    // Can't edit unconfirmed tmp messages or deleted/call messages
     if (String(msg.id).startsWith('tmp_') || msg.deleted || msg.msg_type === 'call') return;
     setEditingId(msg.id);
     setEditText(msg.content);
@@ -226,7 +257,7 @@ function ChatWindow({ friend, currentUser, isOnline, onCall, onBack }) {
   const handleDelete = (msgId) => {
     if (String(msgId).startsWith('tmp_')) return;
     setContextMenu(null);
-    setDeleteConfirm(msgId); // show inline confirm instead of window.confirm
+    setDeleteConfirm(msgId);
   };
 
   const confirmDelete = () => {
@@ -234,20 +265,14 @@ function ChatWindow({ friend, currentUser, isOnline, onCall, onBack }) {
     setDeleteConfirm(null);
   };
 
-  const openContextMenu = (e, msg) => {
-    if (!currentUser?.id || msg.sender_id !== currentUser.id) return;
-    if (msg.deleted || msg.msg_type === 'call') return;
-    if (String(msg.id).startsWith('tmp_')) return; // can't act on pending messages
-    e.preventDefault();
-    const x = e.clientX ?? e.touches?.[0]?.clientX ?? 100;
-    const y = e.clientY ?? e.touches?.[0]?.clientY ?? 100;
-    setContextMenu({ msgId: msg.id, msg, x, y });
-  };
+  const myId = currentUser?.id;
 
   return (
-    <div style={st.chatWin}>
+    // Use position:absolute to fill parent 100% reliably on all Android versions
+    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)' }}>
+
       {/* Header */}
-      <div style={st.chatHead}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderBottom: '1px solid var(--border)', background: 'var(--bg-secondary)', flexShrink: 0 }}>
         <button className="btn-icon" onClick={onBack} style={{ fontSize: 20 }}>←</button>
         <Avatar username={friend.username} avatarUrl={friend.avatar_url} size="sm" online={isOnline} />
         <div style={{ flex: 1 }}>
@@ -257,12 +282,11 @@ function ChatWindow({ friend, currentUser, isOnline, onCall, onBack }) {
           </div>
         </div>
         <div style={{ position: 'relative' }} ref={callMenuRef}>
-          <button className="btn btn-primary" onClick={() => setShowCallMenu(m => !m)}
-            style={{ padding: '8px 14px', fontSize: 13 }}>
+          <button className="btn btn-primary" onClick={() => setShowCallMenu(m => !m)} style={{ padding: '8px 14px', fontSize: 13 }}>
             📞 Call ▾
           </button>
           {showCallMenu && (
-            <div style={st.callMenu}>
+            <div style={{ position: 'absolute', top: '110%', right: 0, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 6, zIndex: 100, minWidth: 185, boxShadow: '0 8px 32px rgba(0,0,0,.5)' }}>
               <CallOpt icon="📞" title="Voice Call" sub="Audio only"     onClick={() => { onCall('voice'); setShowCallMenu(false); }} />
               <CallOpt icon="📹" title="Video Call" sub="Camera + audio" onClick={() => { onCall('video'); setShowCallMenu(false); }} />
             </div>
@@ -271,48 +295,49 @@ function ChatWindow({ friend, currentUser, isOnline, onCall, onBack }) {
       </div>
 
       {/* Messages */}
-      <div style={st.msgs} onClick={e => {
-        // Close context menu only when clicking OUTSIDE it (not on a menu button)
-        if (ctxMenuRef.current && ctxMenuRef.current.contains(e.target)) return;
-        setContextMenu(null);
-      }}>
-        {loading && <div style={st.loadTxt}>Loading messages…</div>}
+      <div
+        style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 2 }}
+        onClick={e => {
+          if (ctxMenuRef.current && ctxMenuRef.current.contains(e.target)) return;
+          setContextMenu(null);
+        }}
+      >
+        {loading && <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 13, padding: 20 }}>Loading messages…</div>}
         {!loading && messages.length === 0 && (
           <div style={{ textAlign: 'center', color: 'var(--text-muted)', marginTop: 40, fontSize: 14 }}>
             No messages yet. Say hi! 👋
           </div>
         )}
         {messages.map((msg, i) => {
-          const isMe     = currentUser?.id && msg.sender_id === currentUser.id;
+          const isMe      = myId && msg.sender_id === myId;
           const isEditing = editingId === msg.id;
-          const isTmp    = String(msg.id).startsWith('tmp_');
+          const isTmp     = String(msg.id).startsWith('tmp_');
 
           return (
-            <div key={msg.id || i}
+            <div
+              key={msg.id || i}
               style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 8, marginBottom: 4 }}
-              onContextMenu={e => openContextMenu(e, msg)}
-              onTouchStart={e => {
-                if (isMe && !msg.deleted && msg.msg_type !== 'call' && !isTmp) {
-                  // Capture position NOW — React pools synthetic events so e is invalid inside setTimeout
-                  const x = e.touches[0]?.clientX ?? 100;
-                  const y = e.touches[0]?.clientY ?? 100;
-                  const el = e.currentTarget;
-                  const t = setTimeout(() => {
-                    // Create a fake event-like object with captured position
-                    setContextMenu({ msgId: msg.id, msg, x, y });
-                  }, 600);
-                  el._pt = t;
-                }
+              onContextMenu={e => {
+                if (!isMe || msg.deleted || msg.msg_type === 'call' || isTmp) return;
+                e.preventDefault();
+                setContextMenu({ msgId: msg.id, msg, x: e.clientX, y: e.clientY });
               }}
-              onTouchEnd={e  => clearTimeout(e.currentTarget._pt)}
-              onTouchMove={e => clearTimeout(e.currentTarget._pt)}>
-
+              onTouchStart={e => {
+                if (!isMe || msg.deleted || msg.msg_type === 'call' || isTmp) return;
+                const x = e.touches[0]?.clientX ?? 100;
+                const y = e.touches[0]?.clientY ?? 100;
+                const el = e.currentTarget;
+                el._pt = setTimeout(() => setContextMenu({ msgId: msg.id, msg, x, y }), 600);
+              }}
+              onTouchEnd={e  => { clearTimeout(e.currentTarget._pt); e.currentTarget._pt = null; }}
+              onTouchMove={e => { clearTimeout(e.currentTarget._pt); e.currentTarget._pt = null; }}
+            >
               {!isMe && <Avatar username={msg.username || friend.username} avatarUrl={msg.avatar_url || friend.avatar_url} size="sm" />}
 
               {msg.msg_type === 'call' ? (
                 <CallBubble msg={msg} isMe={isMe} />
               ) : isEditing ? (
-                <form onSubmit={submitEdit} style={{ display: 'flex', gap: 6, maxWidth: '72%', flex: 1 }}>
+                <form onSubmit={submitEdit} style={{ display: 'flex', gap: 6, flex: 1, maxWidth: '80%' }}>
                   <input ref={editInputRef} className="input" value={editText}
                     onChange={e => setEditText(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Escape') setEditingId(null); }}
@@ -336,8 +361,8 @@ function ChatWindow({ friend, currentUser, isOnline, onCall, onBack }) {
                     {msg.edited && !msg.deleted && <span style={{ opacity: .6 }}>edited</span>}
                     <span>{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     {isMe && (
-                      msg._failed  ? <span title="Failed" style={{ color: 'var(--danger)' }}>✗</span>
-                    : msg._pending ? <span title="Sending…" style={{ opacity: .5 }}>🕐</span>
+                      msg._failed  ? <span style={{ color: 'var(--danger)' }}>✗</span>
+                    : msg._pending ? <span style={{ opacity: .5 }}>🕐</span>
                     : msg.is_read  ? <span style={{ color: 'var(--online-green)' }}>✓✓</span>
                     :                <span style={{ opacity: .5 }}>✓</span>
                     )}
@@ -356,13 +381,20 @@ function ChatWindow({ friend, currentUser, isOnline, onCall, onBack }) {
           ref={ctxMenuRef}
           onMouseDown={e => e.stopPropagation()}
           onTouchStart={e => e.stopPropagation()}
-          style={{ position: 'fixed', top: Math.min(contextMenu.y, window.innerHeight - 120), left: Math.min(contextMenu.x, window.innerWidth - 170), background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 4, zIndex: 600, minWidth: 160, boxShadow: '0 8px 32px rgba(0,0,0,.7)' }}>
-          <button onPointerDown={e => { e.stopPropagation(); startEdit(contextMenu.msg); }} style={st.ctxBtn}>✏️ Edit</button>
-          <button onPointerDown={e => { e.stopPropagation(); handleDelete(contextMenu.msgId); }} style={{ ...st.ctxBtn, color: 'var(--danger)' }}>🗑️ Delete</button>
+          style={{ position: 'fixed', top: Math.min(contextMenu.y, window.innerHeight - 120), left: Math.min(contextMenu.x, window.innerWidth - 170), background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 4, zIndex: 600, minWidth: 160, boxShadow: '0 8px 32px rgba(0,0,0,.7)' }}
+        >
+          <button onPointerDown={e => { e.stopPropagation(); startEdit(contextMenu.msg); }}
+            style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 13, color: 'var(--text-primary)', borderRadius: 6 }}>
+            ✏️ Edit
+          </button>
+          <button onPointerDown={e => { e.stopPropagation(); handleDelete(contextMenu.msgId); }}
+            style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 13, color: 'var(--danger)', borderRadius: 6 }}>
+            🗑️ Delete
+          </button>
         </div>
       )}
 
-      {/* Inline delete confirmation — replaces window.confirm which is blocked on Android */}
+      {/* Delete confirmation dialog */}
       {deleteConfirm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 700 }}
           onClick={() => setDeleteConfirm(null)}>
@@ -370,7 +402,7 @@ function ChatWindow({ friend, currentUser, isOnline, onCall, onBack }) {
             <div style={{ fontSize: 28, marginBottom: 10 }}>🗑️</div>
             <div style={{ fontWeight: 700, marginBottom: 8 }}>Delete message?</div>
             <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>This cannot be undone.</div>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+            <div style={{ display: 'flex', gap: 10 }}>
               <button className="btn btn-ghost" onClick={() => setDeleteConfirm(null)} style={{ flex: 1 }}>Cancel</button>
               <button className="btn btn-danger" onClick={confirmDelete} style={{ flex: 1 }}>Delete</button>
             </div>
@@ -378,12 +410,16 @@ function ChatWindow({ friend, currentUser, isOnline, onCall, onBack }) {
         </div>
       )}
 
-      {/* Input */}
-      <form onSubmit={handleSend} style={st.inputRow}>
-        <input className="input" style={{ flex: 1, borderRadius: 24 }}
-          placeholder="Type a message…" value={input}
+      {/* Input bar */}
+      <form onSubmit={handleSend} style={{ display: 'flex', gap: 10, padding: '12px 16px', borderTop: '1px solid var(--border)', background: 'var(--bg-secondary)', flexShrink: 0 }}>
+        <input
+          className="input"
+          style={{ flex: 1, borderRadius: 24 }}
+          placeholder="Type a message…"
+          value={input}
           onChange={e => { setInput(e.target.value); emitTyping(true); }}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) handleSend(e); }} />
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) handleSend(e); }}
+        />
         <button className="btn btn-primary" type="submit" disabled={!input.trim()} style={{ padding: '10px 20px' }}>Send</button>
       </form>
     </div>
@@ -404,22 +440,3 @@ function CallOpt({ icon, title, sub, onClick }) {
     </button>
   );
 }
-
-const st = {
-  root:       { display: 'flex', width: '100%', flex: 1, minHeight: 0, overflow: 'hidden' },
-  sidebar:    { width: 280, flexShrink: 0, background: 'var(--bg-secondary)', borderRight: '1px solid var(--border)', flexDirection: 'column' },
-  sidebarHead:{ padding: '14px 14px 10px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  friendRow:  { display: 'flex', alignItems: 'center', gap: 10, padding: '10px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', transition: 'background .15s' },
-  friendName: { fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  unreadBadge:{ position: 'absolute', top: -3, right: -3, minWidth: 18, height: 18, borderRadius: 999, background: '#e53e3e', color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', border: '2px solid var(--bg-secondary)', zIndex: 1 },
-  chatArea:   { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
-  placeholder:{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' },
-  empty:      { padding: '40px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 },
-  chatWin:    { display: 'flex', flexDirection: 'column', width: '100%', flex: 1, minHeight: 0, position: 'relative' },
-  chatHead:   { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderBottom: '1px solid var(--border)', background: 'var(--bg-secondary)', flexShrink: 0 },
-  msgs:       { flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 2 },
-  loadTxt:    { textAlign: 'center', color: 'var(--text-muted)', fontSize: 13, padding: 20 },
-  inputRow:   { display: 'flex', gap: 10, padding: '12px 16px', borderTop: '1px solid var(--border)', background: 'var(--bg-secondary)', flexShrink: 0 },
-  callMenu:   { position: 'absolute', top: '110%', right: 0, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 6, zIndex: 100, minWidth: 185, boxShadow: '0 8px 32px rgba(0,0,0,.5)' },
-  ctxBtn:     { display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 13, color: 'var(--text-primary)', borderRadius: 6 },
-};
