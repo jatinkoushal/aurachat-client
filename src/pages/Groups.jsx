@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { useChat } from '../hooks/useChat';
@@ -17,6 +17,9 @@ export default function Groups() {
   const [joinCode, setJoinCode] = useState('');
   const [creating, setCreating] = useState(false);
   const [loadErr, setLoadErr] = useState('');
+  // unreadMap: { [groupId]: count }
+  const [unreadMap, setUnreadMap] = useState({});
+  const { socket, user: socketUser } = useSocket();
 
   const load = async () => {
     try {
@@ -32,6 +35,22 @@ export default function Groups() {
     } catch { setLoadErr('Failed to load groups'); }
   };
   useEffect(() => { load(); }, []);
+
+  // Track unread messages per group when not viewing that group
+  useEffect(() => {
+    if (!socket) return;
+    const onMsg = (msg) => {
+      if (msg.sender_id === socketUser?.id) return; // own messages
+      const gid = msg.groupId;
+      if (!gid) return;
+      // Only count if this group is NOT currently open
+      if (selected?.id !== gid) {
+        setUnreadMap(prev => ({ ...prev, [gid]: (prev[gid] || 0) + 1 }));
+      }
+    };
+    socket.on('group:message:receive', onMsg);
+    return () => socket.off('group:message:receive', onMsg);
+  }, [socket, socketUser, selected]);
 
   const createGroup = async e => {
     e.preventDefault();
@@ -65,6 +84,11 @@ export default function Groups() {
     catch {}
   };
   const toggleMember = id => setSelectedMembers(p => p.includes(id) ? p.filter(m => m !== id) : [...p, id]);
+
+  const openGroup = (g) => {
+    setSelected(g);
+    setUnreadMap(prev => { const n = { ...prev }; delete n[g.id]; return n; });
+  };
 
   if (selected) {
     return <GroupChat group={selected} currentUser={user} onBack={() => { setSelected(null); load(); }} friends={friends} />;
@@ -150,13 +174,20 @@ export default function Groups() {
             <div style={s.empty}><div style={{ fontSize: 48, marginBottom: 12 }}>🏠</div><div style={{ fontWeight: 600 }}>No groups yet</div><div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Create or join a group to get started</div></div>
           )}
           {groups.map(g => (
-            <div key={g.id} onClick={() => setSelected(g)}
+            <div key={g.id} onClick={() => openGroup(g)}
               style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 8px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', borderBottom: '1px solid var(--border)', transition: 'background .15s' }}
               onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-              <Avatar username={g.name} avatarUrl={g.avatar_url} size="md" />
+              <div style={{ position: 'relative', flexShrink: 0 }}>
+                <Avatar username={g.name} avatarUrl={g.avatar_url} size="md" />
+                {(unreadMap[g.id] || 0) > 0 && (
+                  <span style={{ position: 'absolute', top: -3, right: -3, minWidth: 18, height: 18, borderRadius: 999, background: '#e53e3e', color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', border: '2px solid var(--bg-primary)', zIndex: 1 }}>
+                    {unreadMap[g.id] > 99 ? '99+' : unreadMap[g.id]}
+                  </span>
+                )}
+              </div>
               <div style={{ flex: 1, overflow: 'hidden' }}>
-                <div style={{ fontWeight: 600, fontSize: 15 }}>{g.name}</div>
+                <div style={{ fontWeight: (unreadMap[g.id] || 0) > 0 ? 800 : 600, fontSize: 15 }}>{g.name}</div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.description || `${g.member_count} members`}</div>
               </div>
               {g.admin_id === user?.id && <span style={{ fontSize: 10, fontWeight: 700, background: 'var(--accent-primary)', color: '#fff', padding: '2px 8px', borderRadius: 999, flexShrink: 0 }}>Admin</span>}
@@ -236,11 +267,13 @@ function GroupChat({ group, currentUser, onBack, friends }) {
 
   const submitMsgEdit = () => {
     if (!editingText.trim()) { setEditingMsgId(null); return; }
+    if (String(editingMsgId).startsWith('tmp_')) { setEditingMsgId(null); return; }
     editMessage(editingMsgId, editingText.trim());
     setEditingMsgId(null);
   };
 
   const handleMsgDelete = msgId => {
+    if (String(msgId).startsWith('tmp_')) return;
     if (!window.confirm('Delete this message?')) return;
     deleteMessage(msgId); setContextMenu(null);
   };
@@ -326,12 +359,12 @@ function GroupChat({ group, currentUser, onBack, friends }) {
             <div key={msg.id || i}
               style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 6 }}
               onContextMenu={e => {
-                if (!isMe || msg.deleted || msg.msg_type === 'call') return;
+                if (!isMe || msg.deleted || msg.msg_type === 'call' || String(msg.id).startsWith('tmp_')) return;
                 e.preventDefault();
                 setContextMenu({ msgId: msg.id, msg, x: e.clientX, y: e.clientY });
               }}
               onTouchStart={e => {
-                if (!isMe || msg.deleted || msg.msg_type === 'call') return;
+                if (!isMe || msg.deleted || msg.msg_type === 'call' || String(msg.id).startsWith('tmp_')) return;
                 const touch = e.touches[0];
                 const t = setTimeout(() => {
                   setContextMenu({ msgId: msg.id, msg, x: touch.clientX, y: touch.clientY });
@@ -353,7 +386,7 @@ function GroupChat({ group, currentUser, onBack, friends }) {
                     <button className="btn btn-ghost" onClick={() => setEditingMsgId(null)} style={{ padding: '8px 10px', fontSize: 12 }}>✕</button>
                   </div>
                 ) : (
-                  <div className="msg-bubble" style={{ background: isMe ? 'var(--accent-primary)' : 'var(--bg-card)', padding: '10px 14px', borderRadius: 16, borderBottomRightRadius: isMe ? 4 : 16, borderBottomLeftRadius: isMe ? 16 : 4, opacity: msg.deleted ? .65 : 1, maxWidth: '65%' }}>
+                  <div className="msg-bubble" style={{ background: isMe ? 'var(--accent-primary)' : 'var(--bg-card)', padding: '10px 14px', borderRadius: 16, borderBottomRightRadius: isMe ? 4 : 16, borderBottomLeftRadius: isMe ? 16 : 4, opacity: msg.deleted ? .65 : (String(msg.id).startsWith('tmp_') ? 0.72 : 1), maxWidth: '65%' }}>
                     <div style={{ fontSize: 14, wordBreak: 'break-word', fontStyle: msg.deleted ? 'italic' : 'normal', color: msg.deleted ? 'var(--text-muted)' : 'inherit' }}>{msg.content}</div>
                     <div style={{ fontSize: 10, color: 'rgba(255,255,255,.5)', textAlign: 'right', marginTop: 3, display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
                       {msg.edited && !msg.deleted && <span style={{ opacity: .6 }}>edited</span>}
