@@ -60,3 +60,58 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 @keyframes spin{to{transform:rotate(360deg)}}
 .spin{animation:spin 1s linear infinite}
 .badge{display:inline-flex;align-items:center;justify-content:center;background:var(--danger);color:#fff;border-radius:999px;font-size:10px;font-weight:700;min-width:18px;height:18px;padding:0 5px}
+
+/* ── RESPONSIVE BREAKPOINTS ──────────────────────────────────────────────── */
+
+/* Tablet (641px – 1024px) */
+@media (min-width: 641px) {
+  .chat-sidebar { display: flex !important; }
+  .avatar-xl { width: 96px; height: 96px; font-size: 36px; }
+}
+
+/* Desktop / Laptop (1025px+) */
+@media (min-width: 1025px) {
+  /* Wider sidebar on desktop */
+  .chat-sidebar-desktop { width: 320px !important; }
+
+  /* Settings page: two-column layout */
+  .settings-grid { display: grid; grid-template-columns: 260px 1fr; gap: 0; }
+
+  /* Larger avatars */
+  .avatar-xl { width: 110px; height: 110px; font-size: 42px; }
+
+  /* Bigger message bubbles max-width */
+  .msg-bubble { max-width: 55% !important; }
+}
+
+/* Mobile (max 640px) */
+@media (max-width: 640px) {
+  .btn { padding: 9px 16px; font-size: 13px; }
+  .input { font-size: 16px; } /* prevent iOS zoom */
+  .avatar-xl { width: 72px; height: 72px; font-size: 28px; }
+
+  /* Full screen chat on mobile — hide sidebar when chat open */
+  .chat-area-full { width: 100% !important; }
+
+  /* Settings: full-width sections */
+  .settings-section { padding: 12px !important; }
+
+  /* Nav tab labels hidden on very small phones */
+  @media (max-width: 360px) {
+    .tab-label { display: none; }
+    .tab-icon  { font-size: 26px; }
+  }
+}
+
+/* Fix for iOS safe areas */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  nav { padding-bottom: max(8px, env(safe-area-inset-bottom)) !important; }
+}
+
+/* Message bubble responsive width */
+@media (max-width: 640px) {
+  .msg-bubble { max-width: 82% !important; }
+}
+@media (min-width: 641px) and (max-width: 1024px) {
+  .msg-bubble { max-width: 70% !important; }
+}
