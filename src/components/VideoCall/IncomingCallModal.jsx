@@ -5,31 +5,53 @@ import WebRTCCall from './WebRTCCall';
 export default function IncomingCallModal() {
   const { incomingCall, setIncomingCall, socket } = useSocket();
   const [active,   setActive]   = useState(null);
-  const ringRef    = useRef(null);  // { ctx, stop }
+  const ringRef    = useRef(null);
   const timeoutRef = useRef(null);
+  // Use a counter so re-calling the same person re-triggers the effect
+  const callKeyRef = useRef(0);
+  const [callKey,  setCallKey]  = useState(0);
 
-  // Create and play ringtone
+  // Every time incomingCall changes to a new call (non-null), bump the key
+  // This ensures the effect always re-runs even if same caller calls again
+  const prevCallRef = useRef(null);
+  useEffect(() => {
+    if (incomingCall && incomingCall !== prevCallRef.current) {
+      prevCallRef.current = incomingCall;
+      callKeyRef.current++;
+      setCallKey(callKeyRef.current);
+    }
+    if (!incomingCall) {
+      prevCallRef.current = null;
+    }
+  }, [incomingCall]);
+
+  const stopRing = () => {
+    if (ringRef.current) {
+      ringRef.current.stop();
+      ringRef.current = null;
+    }
+  };
+
   const startRing = () => {
+    stopRing();
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      ctx.resume().catch(() => {}); // needed on iOS
+      // iOS/Android: must resume context
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
       let alive = true;
 
       const tick = () => {
         if (!alive) return;
-        const tones = [
-          { freq: 480, from: 0,    to: 0.4  },
-          { freq: 440, from: 0.45, to: 0.85 },
-        ];
+        const tones = [{ freq: 480, from: 0, to: 0.4 }, { freq: 440, from: 0.45, to: 0.85 }];
         tones.forEach(({ freq, from, to }) => {
           try {
             const osc  = ctx.createOscillator();
             const gain = ctx.createGain();
             osc.connect(gain); gain.connect(ctx.destination);
             osc.type = 'sine'; osc.frequency.value = freq;
-            gain.gain.setValueAtTime(0,   ctx.currentTime + from);
+            gain.gain.setValueAtTime(0,    ctx.currentTime + from);
             gain.gain.linearRampToValueAtTime(0.4, ctx.currentTime + from + 0.05);
-            gain.gain.setValueAtTime(0.4, ctx.currentTime + to - 0.05);
+            gain.gain.setValueAtTime(0.4,  ctx.currentTime + to - 0.05);
             gain.gain.linearRampToValueAtTime(0,   ctx.currentTime + to);
             osc.start(ctx.currentTime + from);
             osc.stop(ctx.currentTime  + to);
@@ -38,39 +60,32 @@ export default function IncomingCallModal() {
         if (alive) setTimeout(tick, 2200);
       };
       tick();
-
       ringRef.current = {
         stop: () => {
           alive = false;
-          // Schedule close after last note fades
-          setTimeout(() => { try { ctx.close(); } catch {} }, 600);
-          ringRef.current = null;
+          // Immediately close context — stops all queued audio instantly
+          try { ctx.close(); } catch {}
         },
       };
     } catch {}
   };
 
-  const stopRing = () => {
-    ringRef.current?.stop();
-    ringRef.current = null;
-  };
-
+  // Re-run whenever callKey changes (new call arrived)
   useEffect(() => {
     if (!incomingCall) return;
-
-    // Start ringtone — triggered by socket event which may not be a user gesture on iOS.
-    // We try anyway; worst case it fails silently and the visual modal still shows.
     startRing();
 
     // Browser notification
     if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification(
-        `📞 Incoming ${incomingCall.callType === 'voice' ? 'Voice' : 'Video'} Call`,
-        { body: `${incomingCall.fromUsername} is calling you`, icon: '/favicon.ico' }
-      );
+      try {
+        new Notification(
+          `📞 Incoming ${incomingCall.callType === 'voice' ? 'Voice' : 'Video'} Call`,
+          { body: `${incomingCall.fromUsername} is calling you`, icon: '/favicon.ico' }
+        );
+      } catch {}
     }
 
-    // Auto-reject after 35 seconds
+    // Auto-reject after 35s
     timeoutRef.current = setTimeout(() => {
       socket?.emit('call:reject', { to: incomingCall.from });
       stopRing();
@@ -82,9 +97,9 @@ export default function IncomingCallModal() {
       stopRing();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [incomingCall?.from]);  // key on .from so effect re-runs for new calls only
+  }, [callKey]); // keyed on callKey, not incomingCall reference
 
-  // Callee accepted — show WebRTCCall
+  // Callee accepted — show call screen
   if (active) {
     return (
       <WebRTCCall
@@ -105,9 +120,10 @@ export default function IncomingCallModal() {
 
   const accept = () => {
     clearTimeout(timeoutRef.current);
-    stopRing();                             // stop ringing immediately on accept
+    stopRing();
     socket?.emit('call:accept', { to: incomingCall.from });
-    setActive(incomingCall);               // render WebRTCCall as callee
+    setActive({ ...incomingCall }); // copy so it persists after setIncomingCall(null)
+    setIncomingCall(null);
   };
 
   const reject = () => {
@@ -117,66 +133,90 @@ export default function IncomingCallModal() {
     setIncomingCall(null);
   };
 
+  // Full-screen modal — covers everything including nav bar
+  // Uses very high z-index to ensure it shows on top on Android
   return (
-    <div style={m.overlay}>
-      <div style={m.card}>
-        {/* Pulsing ring animation */}
-        <div style={{ position: 'relative', width: 100, height: 100, margin: '0 auto 24px' }}>
-          {[0, 0.4, 0.8].map(d => (
-            <div key={d} style={{
-              position: 'absolute', inset: 0, borderRadius: '50%',
-              background: 'rgba(108,99,255,.2)',
-              animation: `callRing 1.8s ${d}s ease-out infinite`,
-            }} />
-          ))}
-          <div style={m.avatar}>
-            {incomingCall.callType === 'voice' ? '📞' : '📹'}
-          </div>
-        </div>
+    <div style={{
+      position: 'fixed',
+      top: 0, left: 0, right: 0, bottom: 0,
+      width: '100vw',
+      height: '100dvh',
+      background: 'linear-gradient(160deg, #0a0a1a 0%, #1a0a2e 100%)',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 9999,        // maximum z-index — above everything
+      padding: 24,
 
-        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 6 }}>
-          Incoming {incomingCall.callType === 'voice' ? 'Voice' : 'Video'} Call
-        </div>
-        <div style={{ fontSize: 26, fontWeight: 800, marginBottom: 36 }}>
-          {incomingCall.fromUsername}
-        </div>
-
-        <div style={{ display: 'flex', gap: 40, justifyContent: 'center' }}>
-          <CircleBtn onClick={reject} bg="#e53e3e" icon="📵"
-            label="Decline" />
-          <CircleBtn onClick={accept} bg="#38a169"
-            icon={incomingCall.callType === 'voice' ? '📞' : '📹'}
-            label="Accept" />
+    }}>
+      {/* Pulsing rings */}
+      <div style={{ position: 'relative', width: 120, height: 120, marginBottom: 32 }}>
+        {[0, 0.5, 1.0].map(d => (
+          <div key={d} style={{
+            position: 'absolute', inset: 0, borderRadius: '50%',
+            border: '2px solid rgba(108,99,255,.4)',
+            animation: `callRing 2s ${d}s ease-out infinite`,
+          }} />
+        ))}
+        <div style={{
+          position: 'absolute', inset: 0, borderRadius: '50%',
+          background: 'linear-gradient(135deg, #6c63ff, #a29bfe)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 48, boxShadow: '0 0 40px rgba(108,99,255,.7)',
+          zIndex: 1,
+        }}>
+          {incomingCall.callType === 'voice' ? '📞' : '📹'}
         </div>
       </div>
+
+      <div style={{ color: 'rgba(255,255,255,.6)', fontSize: 14, marginBottom: 8, letterSpacing: 1 }}>
+        INCOMING {(incomingCall.callType || 'VIDEO').toUpperCase()} CALL
+      </div>
+      <div style={{ color: '#fff', fontSize: 30, fontWeight: 800, marginBottom: 60, textAlign: 'center' }}>
+        {incomingCall.fromUsername}
+      </div>
+
+      {/* Accept / Reject buttons — large for easy mobile tapping */}
+      <div style={{ display: 'flex', gap: 60, alignItems: 'center' }}>
+        {/* Reject */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+          <button onClick={reject}
+            style={{
+              width: 80, height: 80, borderRadius: '50%', border: 'none',
+              background: '#e53e3e', fontSize: 34, cursor: 'pointer', color: '#fff',
+              boxShadow: '0 8px 32px rgba(229,62,62,.6)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              // Large touch target for Android
+              WebkitTapHighlightColor: 'transparent',
+            }}>
+            📵
+          </button>
+          <span style={{ color: 'rgba(255,255,255,.7)', fontSize: 13, fontWeight: 600 }}>Decline</span>
+        </div>
+
+        {/* Accept */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+          <button onClick={accept}
+            style={{
+              width: 80, height: 80, borderRadius: '50%', border: 'none',
+              background: '#38a169', fontSize: 34, cursor: 'pointer', color: '#fff',
+              boxShadow: '0 8px 32px rgba(56,161,105,.6)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              WebkitTapHighlightColor: 'transparent',
+            }}>
+            {incomingCall.callType === 'voice' ? '📞' : '📹'}
+          </button>
+          <span style={{ color: 'rgba(255,255,255,.7)', fontSize: 13, fontWeight: 600 }}>Accept</span>
+        </div>
+      </div>
+
       <style>{`
         @keyframes callRing {
-          0%   { transform:scale(1);   opacity:.8; }
-          100% { transform:scale(2.5); opacity:0;  }
+          0%   { transform: scale(1);   opacity: 0.8; }
+          100% { transform: scale(2.2); opacity: 0;   }
         }
       `}</style>
     </div>
   );
 }
-
-function CircleBtn({ onClick, bg, icon, label }) {
-  return (
-    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
-      <button onClick={onClick} style={{
-        width:72, height:72, borderRadius:'50%', border:'none',
-        background: bg, fontSize:30, cursor:'pointer', color:'#fff',
-        boxShadow: `0 6px 24px ${bg}90`, transition:'transform .15s',
-      }}
-        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'}
-        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-      >{icon}</button>
-      <span style={{ fontSize:12, color:'var(--text-muted)', fontWeight:600 }}>{label}</span>
-    </div>
-  );
-}
-
-const m = {
-  overlay: { position:'fixed', inset:0, background:'rgba(0,0,0,.92)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1500, padding:20 },
-  card:    { background:'var(--bg-secondary)', border:'1px solid var(--border)', borderRadius:28, padding:'44px 40px', width:'100%', maxWidth:320, textAlign:'center', boxShadow:'0 0 100px rgba(108,99,255,.3)' },
-  avatar:  { width:100, height:100, borderRadius:'50%', background:'linear-gradient(135deg,#6c63ff,#a29bfe)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:42, position:'relative', zIndex:1, boxShadow:'0 0 30px rgba(108,99,255,.5)' },
-};
