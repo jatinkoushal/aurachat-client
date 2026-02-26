@@ -369,7 +369,7 @@ function GroupChat({ group, currentUser, onBack, friends }) {
         {loading && <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>}
         {!loading && messages.length === 0 && <div style={{ textAlign: 'center', color: 'var(--text-muted)', marginTop: 40, fontSize: 14 }}>No messages yet. Say something! 👋</div>}
         {messages.map((msg, i) => {
-          const isMe = msg.sender_id === currentUser.id;
+          const isMe = currentUser?.id && msg.sender_id === currentUser.id;
           const isEditing = editingMsgId === msg.id;
           return (
             <div key={msg.id || i}
@@ -464,7 +464,7 @@ function GroupChat({ group, currentUser, onBack, friends }) {
 }
 
 const s = {
-  page:   { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', width: '100%' },
+  page:   { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', width: '100%' },
   header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '1px solid var(--border)', background: 'var(--bg-secondary)', flexShrink: 0 },
   panel:  { padding: 16, borderBottom: '1px solid var(--border)', background: 'var(--bg-secondary)', flexShrink: 0 },
   empty:  { padding: '40px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 },
