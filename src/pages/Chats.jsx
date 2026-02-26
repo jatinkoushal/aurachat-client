@@ -235,7 +235,7 @@ function ChatWindow({ friend, currentUser, isOnline, onCall, onBack }) {
   };
 
   const openContextMenu = (e, msg) => {
-    if (msg.sender_id !== currentUser.id) return;
+    if (!currentUser?.id || msg.sender_id !== currentUser.id) return;
     if (msg.deleted || msg.msg_type === 'call') return;
     if (String(msg.id).startsWith('tmp_')) return; // can't act on pending messages
     e.preventDefault();
@@ -283,7 +283,7 @@ function ChatWindow({ friend, currentUser, isOnline, onCall, onBack }) {
           </div>
         )}
         {messages.map((msg, i) => {
-          const isMe     = msg.sender_id === currentUser.id;
+          const isMe     = currentUser?.id && msg.sender_id === currentUser.id;
           const isEditing = editingId === msg.id;
           const isTmp    = String(msg.id).startsWith('tmp_');
 
@@ -406,16 +406,16 @@ function CallOpt({ icon, title, sub, onClick }) {
 }
 
 const st = {
-  root:       { display: 'flex', width: '100%', height: '100%', overflow: 'hidden' },
+  root:       { display: 'flex', width: '100%', flex: 1, minHeight: 0, overflow: 'hidden' },
   sidebar:    { width: 280, flexShrink: 0, background: 'var(--bg-secondary)', borderRight: '1px solid var(--border)', flexDirection: 'column' },
   sidebarHead:{ padding: '14px 14px 10px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   friendRow:  { display: 'flex', alignItems: 'center', gap: 10, padding: '10px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', transition: 'background .15s' },
   friendName: { fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   unreadBadge:{ position: 'absolute', top: -3, right: -3, minWidth: 18, height: 18, borderRadius: 999, background: '#e53e3e', color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', border: '2px solid var(--bg-secondary)', zIndex: 1 },
-  chatArea:   { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', width: '100%' },
+  chatArea:   { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
   placeholder:{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' },
   empty:      { padding: '40px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 },
-  chatWin:    { display: 'flex', flexDirection: 'column', width: '100%', height: '100%', position: 'relative' },
+  chatWin:    { display: 'flex', flexDirection: 'column', width: '100%', flex: 1, minHeight: 0, position: 'relative' },
   chatHead:   { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderBottom: '1px solid var(--border)', background: 'var(--bg-secondary)', flexShrink: 0 },
   msgs:       { flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 2 },
   loadTxt:    { textAlign: 'center', color: 'var(--text-muted)', fontSize: 13, padding: 20 },
