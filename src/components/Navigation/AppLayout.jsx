@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useSocket } from '../../context/SocketContext';
 import IncomingCallModal from '../VideoCall/IncomingCallModal';
 import api from '../../services/api';
@@ -9,22 +9,25 @@ export default function AppLayout() {
   const [inviteCount, setInviteCount] = useState(0);
   const [requestCount, setRequestCount] = useState(0);
 
-  const loadBadges = () => {
+  const loadBadges = useCallback(() => {
     api.get('/api/groups/invites').then(res => setInviteCount(res.data.invites?.length || 0)).catch(() => {});
     api.get('/api/relationships').then(res => {
       const pending = (res.data.relationships || []).filter(r => r.status === 'pending' && r.direction === 'received');
       setRequestCount(pending.length);
     }).catch(() => {});
-  };
+  }, []);
 
-  useEffect(() => { loadBadges(); }, []);
+  useEffect(() => { loadBadges(); }, [loadBadges]);
 
-  // Real-time: refresh badges when socket events happen
+  // Refresh badges on socket events that might change counts
   useEffect(() => {
     if (!socket) return;
-    socket.on('message:receive', loadBadges);
-    return () => socket.off('message:receive', loadBadges);
-  }, [socket]);
+    // When we receive a message, a new request notification could be embedded
+    // Better: reload badges on any relevant event
+    const refresh = () => loadBadges();
+    socket.on('connect', refresh);
+    return () => { socket.off('connect', refresh); };
+  }, [socket, loadBadges]);
 
   const tabs = [
     { path: '/chats',    icon: '💬', label: 'Chats' },
