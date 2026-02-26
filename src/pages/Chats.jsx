@@ -66,16 +66,16 @@ export default function Chats() {
 
       {/* ── Friend list sidebar ─────────────────────────────── */}
       <div
-   className={`chat-sidebar${selected ? ' chat-sidebar-hidden' : ''}`}
-style={{
-  width: '100%',
-  flexShrink: 0,
-  background: 'var(--bg-secondary)',
-  borderRight: '1px solid var(--border)',
-  flexDirection: 'column',
-  height: '100%',
-  overflowY: 'auto',
-}}
+        className={`chat-sidebar${selected ? ' chat-sidebar-hidden' : ''}`}
+        style={{
+          width: '100%',
+          flexShrink: 0,
+          background: 'var(--bg-secondary)',
+          borderRight: '1px solid var(--border)',
+          flexDirection: 'column',
+          height: '100%',
+          overflowY: 'auto',
+        }}
       >
         <div style={{ padding: '14px 14px 10px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
           <h2 style={{ fontSize: 18, fontWeight: 800 }}>Chats</h2>
@@ -121,14 +121,14 @@ style={{
 
       {/* ── Chat area ───────────────────────────────────────── */}
       <div
-       className={`chat-area-pane${!selected ? ' chat-area-hidden' : ''}`}
-style={{
-  flex: 1,
-  flexDirection: 'column',
-  height: '100%',
-  overflow: 'hidden',
-  minWidth: 0,
-}}
+        className={`chat-area-pane${!selected ? ' chat-area-hidden' : ''}`}
+        style={{
+          flex: 1,
+          flexDirection: 'column',
+          height: '100%',
+          overflow: 'hidden',
+          minWidth: 0,
+        }}
       >
         {selected ? (
           <ChatWindow
@@ -147,22 +147,27 @@ style={{
         )}
       </div>
 
-<style>{`
-  .chat-sidebar      { display: flex; }
-  .chat-sidebar-hidden { display: none; }
-  .chat-area-pane    { display: none; }
-  .chat-area-pane:not(.chat-area-hidden) { display: flex; }
+      <style>{`
+        /* Mobile default: sidebar visible, chat area hidden */
+        .chat-sidebar      { display: flex; }
+        .chat-sidebar-hidden { display: none; }
+        .chat-area-pane    { display: none; }
+        .chat-area-hidden  { display: none; }
 
-  @media (min-width: 640px) {
-    .chat-sidebar         { display: flex !important; width: 280px !important; }
-    .chat-sidebar-hidden  { display: flex !important; width: 280px !important; }
-    .chat-area-pane       { display: flex !important; }
-    .chat-area-hidden     { display: flex !important; }
-  }
-  @media (min-width: 1025px) {
-    .chat-sidebar, .chat-sidebar-hidden { width: 320px !important; }
-  }
-`}</style>
+        /* When chat is open on mobile, show chat area */
+        .chat-area-pane:not(.chat-area-hidden) { display: flex; }
+
+        /* Desktop (640px+): ALWAYS show both panels side by side */
+        @media (min-width: 640px) {
+          .chat-sidebar         { display: flex !important; width: 280px !important; }
+          .chat-sidebar-hidden  { display: flex !important; width: 280px !important; }
+          .chat-area-pane       { display: flex !important; }
+          .chat-area-hidden     { display: flex !important; }
+        }
+        @media (min-width: 1025px) {
+          .chat-sidebar, .chat-sidebar-hidden { width: 320px !important; }
+        }
+      `}</style>
     </div>
   );
 }
