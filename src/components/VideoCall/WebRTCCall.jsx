@@ -61,7 +61,8 @@ export default function WebRTCCall({ peerId, peerUsername, callType = 'video', i
       ringAudioRef.current = {
         stop: () => {
           alive = false;
-          setTimeout(() => { try { ctx.close(); } catch {} }, 700);
+          // Close context immediately — this cancels all queued oscillator audio
+          try { ctx.close(); } catch {}
         },
       };
     } catch {}
