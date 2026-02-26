@@ -64,7 +64,7 @@ export default function AppLayout() {
 
 const st = {
   layout:   { display: 'flex', flexDirection: 'column', height: '100dvh', background: 'var(--bg-primary)' },
-  main:     { flex: 1, overflow: 'hidden', display: 'flex', width: '100%' },
+  main:     { flex: 1, height: 0, overflow: 'hidden', display: 'flex', width: '100%' },
   nav:      { display: 'flex', background: 'var(--bg-secondary)', borderTop: '1px solid var(--border)', padding: '8px 0 max(8px, env(safe-area-inset-bottom))', flexShrink: 0 },
   tab:      { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '6px 4px', textDecoration: 'none', color: 'var(--text-muted)', transition: 'color .2s' },
   active:   { color: 'var(--accent-primary)' },
