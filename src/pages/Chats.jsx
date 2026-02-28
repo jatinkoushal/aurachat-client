@@ -216,7 +216,7 @@ function ChatWindow({ friend, currentUser, isOnline, onCall, onBack }) {
   const editInputRef = useRef(null);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
-  useEffect(() => { markRead(); }, [messages, markRead]);
+  useEffect(() => { if (typeof markRead === "function") markRead(); }, [messages, markRead]);
 
   // Close dropdowns when tapping outside
   useEffect(() => {
