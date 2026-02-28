@@ -322,12 +322,12 @@ function ChatWindow({ friend, currentUser, isOnline, onCall, onBack }) {
               key={msg.id || i}
               style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 8, marginBottom: 4 }}
               onContextMenu={e => {
-                if (!isMe || msg.deleted || msg.msg_type === 'call' || isTmp) return;
+                if (!isMe || msg.msg_type === 'call' || isTmp) return;
                 e.preventDefault();
                 setContextMenu({ msgId: msg.id, msg, x: e.clientX, y: e.clientY });
               }}
               onTouchStart={e => {
-                if (!isMe || msg.deleted || msg.msg_type === 'call' || isTmp) return;
+                if (!isMe || msg.msg_type === 'call' || isTmp) return;
                 const x = e.touches[0]?.clientX ?? 100;
                 const y = e.touches[0]?.clientY ?? 100;
                 const el = e.currentTarget;
@@ -356,9 +356,9 @@ function ChatWindow({ friend, currentUser, isOnline, onCall, onBack }) {
                   borderBottomLeftRadius:  isMe ? 16 : 4,
                   background: msg.deleted ? 'var(--bg-card)' : isMe ? 'var(--accent-primary)' : 'var(--bg-card)',
                   opacity:    msg.deleted ? 0.65 : isTmp ? 0.75 : 1,
-                  cursor:     isMe && !msg.deleted && !isTmp ? 'context-menu' : 'default',
+                  cursor:     isMe && !isTmp ? 'context-menu' : 'default',
                 }}>
-                  <div style={{ fontSize: 14, wordBreak: 'break-word', fontStyle: msg.deleted ? 'italic' : 'normal', color: msg.deleted ? 'var(--text-muted)' : 'inherit' }}>
+                  <div style={{ fontSize: 14, overflowWrap: 'break-word', wordBreak: 'break-word', fontStyle: msg.deleted ? 'italic' : 'normal', color: msg.deleted ? 'var(--text-muted)' : 'inherit' }}>
                     {msg.content}
                   </div>
                   <div style={{ display: 'flex', gap: 4, fontSize: 10, color: 'rgba(255,255,255,.5)', justifyContent: 'flex-end', marginTop: 3, alignItems: 'center' }}>
@@ -387,10 +387,12 @@ function ChatWindow({ friend, currentUser, isOnline, onCall, onBack }) {
           onTouchStart={e => e.stopPropagation()}
           style={{ position: 'fixed', top: Math.min(contextMenu.y, window.innerHeight - 120), left: Math.min(contextMenu.x, window.innerWidth - 170), background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 4, zIndex: 600, minWidth: 160, boxShadow: '0 8px 32px rgba(0,0,0,.7)' }}
         >
-          <button onPointerDown={e => { e.stopPropagation(); startEdit(contextMenu.msg); }}
-            style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 13, color: 'var(--text-primary)', borderRadius: 6 }}>
-            ✏️ Edit
-          </button>
+          {!contextMenu.msg.deleted && (
+            <button onPointerDown={e => { e.stopPropagation(); startEdit(contextMenu.msg); }}
+              style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 13, color: 'var(--text-primary)', borderRadius: 6 }}>
+              ✏️ Edit
+            </button>
+          )}
           <button onPointerDown={e => { e.stopPropagation(); handleDelete(contextMenu.msgId); }}
             style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 13, color: 'var(--danger)', borderRadius: 6 }}>
             🗑️ Delete
