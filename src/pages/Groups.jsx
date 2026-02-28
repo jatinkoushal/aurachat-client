@@ -5,6 +5,33 @@ import { useChat } from '../hooks/useChat';
 import Avatar from '../components/Sidebar/Avatar';
 import api from '../services/api';
 
+
+// ── Call log bubble (same as in Chats.jsx) ───────────────────────────────────
+function CallBubble({ msg, isMe }) {
+  let info = { callType: 'video', duration: 0, status: 'completed' };
+  try { info = JSON.parse(msg.content); } catch {}
+  const isVoice  = (info.callType || '').toLowerCase() === 'voice';
+  const callIcon = isVoice ? '📞' : '📹';
+  const label    = isVoice ? 'Voice Call' : 'Video Call';
+  const missed   = info.status === 'missed' || !info.duration;
+  const mins     = Math.floor((info.duration || 0) / 60);
+  const secs     = (info.duration || 0) % 60;
+  const durText  = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+  return (
+    <div style={{ background: isMe ? 'var(--accent-primary)' : 'var(--bg-card)', padding: '10px 16px', borderRadius: 16, borderBottomRightRadius: isMe ? 4 : 16, borderBottomLeftRadius: isMe ? 16 : 4, display: 'flex', alignItems: 'center', gap: 10, minWidth: 175 }}>
+      <span style={{ fontSize: 26 }}>{callIcon}</span>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 3 }}>{label}</div>
+        <div style={{ fontSize: 11, opacity: .85, display: 'flex', alignItems: 'center', gap: 5 }}>
+          {missed ? <span>✖️ Missed</span> : <span>✔️ {durText}</span>}
+          <span style={{ opacity: .5 }}>•</span>
+          <span>{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Groups() {
   const { user } = useAuth();
   const [groups, setGroups] = useState([]);
@@ -375,12 +402,12 @@ function GroupChat({ group, currentUser, onBack, friends }) {
             <div key={msg.id || i}
               style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 6 }}
               onContextMenu={e => {
-                if (!isMe || msg.deleted || msg.msg_type === 'call' || String(msg.id).startsWith('tmp_')) return;
+                if (!isMe || msg.msg_type === 'call' || String(msg.id).startsWith('tmp_')) return;
                 e.preventDefault();
                 setContextMenu({ msgId: msg.id, msg, x: e.clientX, y: e.clientY });
               }}
               onTouchStart={e => {
-                if (!isMe || msg.deleted || msg.msg_type === 'call' || String(msg.id).startsWith('tmp_')) return;
+                if (!isMe || msg.msg_type === 'call' || String(msg.id).startsWith('tmp_')) return;
                 // Capture coords now — React pools event objects so touch is invalid after timeout
                 const x = e.touches[0]?.clientX ?? 100;
                 const y = e.touches[0]?.clientY ?? 100;
@@ -393,7 +420,7 @@ function GroupChat({ group, currentUser, onBack, friends }) {
               onTouchEnd={e => { clearTimeout(e.currentTarget._pressTimer); }}
               onTouchMove={e => { clearTimeout(e.currentTarget._pressTimer); }}>
               {!isMe && <Avatar username={msg.username} avatarUrl={msg.avatar_url} size="sm" />}
-              <div style={{ maxWidth: '65%' }}>
+              <div style={{ maxWidth: '72%', minWidth: 0 }}>
                 {!isMe && <div style={{ fontSize: 11, color: 'var(--accent-secondary)', fontWeight: 600, marginBottom: 2 }}>{msg.username}</div>}
                 {isEditing ? (
                   <div style={{ display: 'flex', gap: 6 }}>
@@ -405,8 +432,8 @@ function GroupChat({ group, currentUser, onBack, friends }) {
                     <button className="btn btn-ghost" onClick={() => setEditingMsgId(null)} style={{ padding: '8px 10px', fontSize: 12 }}>✕</button>
                   </div>
                 ) : (
-                  <div className="msg-bubble" style={{ background: isMe ? 'var(--accent-primary)' : 'var(--bg-card)', padding: '10px 14px', borderRadius: 16, borderBottomRightRadius: isMe ? 4 : 16, borderBottomLeftRadius: isMe ? 16 : 4, opacity: msg.deleted ? .65 : (String(msg.id).startsWith('tmp_') ? 0.72 : 1), maxWidth: '65%' }}>
-                    <div style={{ fontSize: 14, wordBreak: 'break-word', fontStyle: msg.deleted ? 'italic' : 'normal', color: msg.deleted ? 'var(--text-muted)' : 'inherit' }}>{msg.content}</div>
+                  <div className="msg-bubble" style={{ background: isMe ? 'var(--accent-primary)' : 'var(--bg-card)', padding: '10px 14px', borderRadius: 16, borderBottomRightRadius: isMe ? 4 : 16, borderBottomLeftRadius: isMe ? 16 : 4, opacity: msg.deleted ? .65 : (String(msg.id).startsWith('tmp_') ? 0.72 : 1), cursor: isMe && !String(msg.id).startsWith('tmp_') ? 'context-menu' : 'default' }}>
+                    {msg.msg_type === 'call' ? <CallBubble msg={msg} isMe={isMe} /> : <div style={{ fontSize: 14, overflowWrap: 'break-word', wordBreak: 'break-word', fontStyle: msg.deleted ? 'italic' : 'normal', color: msg.deleted ? 'var(--text-muted)' : 'inherit' }}>{msg.content}</div>}
                     <div style={{ fontSize: 10, color: 'rgba(255,255,255,.5)', textAlign: 'right', marginTop: 3, display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
                       {msg.edited && !msg.deleted && <span style={{ opacity: .6 }}>edited</span>}
                       <span>{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -426,10 +453,12 @@ function GroupChat({ group, currentUser, onBack, friends }) {
           onMouseDown={e => e.stopPropagation()}
           onTouchStart={e => e.stopPropagation()}
           style={{ position: 'fixed', top: Math.min(contextMenu.y, window.innerHeight - 120), left: Math.min(contextMenu.x, window.innerWidth - 170), background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 4, zIndex: 600, minWidth: 160, boxShadow: '0 8px 32px rgba(0,0,0,.7)' }}>
-          <button onPointerDown={e => { e.stopPropagation(); setEditingMsgId(contextMenu.msgId); setEditingText(contextMenu.msg.content); setContextMenu(null); }}
-            style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 13, color: 'var(--text-primary)', borderRadius: 6 }}>
-            ✏️ Edit
-          </button>
+          {!contextMenu.msg.deleted && (
+            <button onPointerDown={e => { e.stopPropagation(); setEditingMsgId(contextMenu.msgId); setEditingText(contextMenu.msg.content); setContextMenu(null); }}
+              style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 13, color: 'var(--text-primary)', borderRadius: 6 }}>
+              ✏️ Edit
+            </button>
+          )}
           <button onPointerDown={e => { e.stopPropagation(); handleMsgDelete(contextMenu.msgId); }}
             style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 13, color: 'var(--danger)', borderRadius: 6 }}>
             🗑️ Delete
